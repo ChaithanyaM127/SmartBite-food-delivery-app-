@@ -764,7 +764,7 @@ footer {
             <p>Explore elite local kitchens, track your nutrition effortlessly, and let Tapu AI curate your next meal.</p>
             <div class="hero-buttons">
                 <a href="restaurants" class="btn-primary">Explore Restaurants →</a>
-                <button type="button" class="btn-secondary" onclick="ftaAsk('what should i eat')">Ask Tapu AI ✳</button>
+                <button type="button" class="btn-secondary" onclick="ftaAsk('what should i eat')">Ask BiteAI ✳</button>
             </div>
         </div>
     </section>
