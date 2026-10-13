@@ -1,12 +1,16 @@
 FROM tomcat:10.1-jdk21-temurin
 
-RUN apt-get update && apt-get install -y maven && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y maven curl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY . .
 
-RUN mkdir -p /usr/local/tomcat/webapps/ROOT/WEB-INF/classes
+RUN mkdir -p /usr/local/tomcat/webapps/ROOT/WEB-INF/classes 
+    /usr/local/tomcat/webapps/ROOT/WEB-INF/lib
+
+RUN curl -fsSL https://repo.maven.apache.org/maven2/com/mysql/mysql-connector-j/9.2.0/mysql-connector-j-9.2.0.jar 
+    -o /usr/local/tomcat/webapps/ROOT/WEB-INF/lib/mysql-connector-j-9.2.0.jar
 
 RUN find . -name "*.java" -print > sources.txt
 
