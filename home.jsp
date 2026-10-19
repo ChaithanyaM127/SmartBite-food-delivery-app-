@@ -4,27 +4,33 @@
 <%@ page import="java.sql.ResultSet" %>
 <%@ page import="java.time.LocalTime" %>
 <%@ page import="java.time.ZoneId" %>
-<%@ page import="java.time.ZonedDateTime" %>
+<%@ page import="java.time.LocalDate" %>
+<%@ page import="java.time.format.DateTimeFormatter" %>
+<%@ page import="java.util.ArrayList" %>
+<%@ page import="java.util.List" %>
 <%@ page import="com.foodtap.util.DBConnection" %>
 <%@ page import="com.foodtap.dao.HealthSummaryDAO" %>
 <%@ page import="com.foodtap.daoimpl.HealthSummaryDAOImpl" %>
 <%@ page import="com.foodtap.model.HealthSummary" %>
 <%@ page import="com.foodtap.model.User" %>
+<%@ page import="com.foodtap.model.CartItem" %>
 
 <%
     response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     response.setHeader("Pragma", "no-cache");
     response.setDateHeader("Expires", 0);
 
-    HealthSummary healthSummary = (HealthSummary) request.getAttribute("healthSummary");
+    User loggedInUser = (User) session.getAttribute("loggedInUser");
 
-    if (healthSummary == null) {
+    HealthSummary healthSummary =
+        (HealthSummary) request.getAttribute("healthSummary");
+
+    if (healthSummary == null && loggedInUser != null
+            && loggedInUser.getUserId() > 0) {
         try {
-            User loggedInUser = (User) session.getAttribute("loggedInUser");
-            if (loggedInUser != null && loggedInUser.getUserId() > 0) {
-                HealthSummaryDAO healthSummaryDAO = new HealthSummaryDAOImpl();
-                healthSummary = healthSummaryDAO.getTodayHealthSummary(loggedInUser.getUserId());
-            }
+            HealthSummaryDAO healthDAO = new HealthSummaryDAOImpl();
+            healthSummary =
+                healthDAO.getTodayHealthSummary(loggedInUser.getUserId());
         } catch (Exception e) {
             application.log("Unable to load today's health summary.", e);
         }
@@ -43,29 +49,211 @@
 
     float healthCalories = healthSummary.getCalories();
     float healthGoal = healthSummary.getCalorieGoal();
-    if (healthGoal <= 0) healthGoal = 1500;
+
+    if (healthGoal <= 0) {
+        healthGoal = 1500;
+    }
 
     float healthRemaining = Math.max(0, healthGoal - healthCalories);
-    float healthPercentage = Math.min(100, Math.max(0, (healthCalories / healthGoal) * 100));
+    float healthPercentage = Math.min(100,
+        Math.max(0, (healthCalories / healthGoal) * 100));
+
     int circlePercentage = Math.round(healthPercentage);
 
     String healthQuote;
+
     if (healthCalories <= 0) {
-        healthQuote = "🔥 Fuel your hustle! Pick a balanced meal to conquer your daily goals.";
+        healthQuote = "🔥 Fuel your hustle! Pick a balanced meal to start your day.";
     } else if (healthCalories < healthGoal * 0.5f) {
-        healthQuote = "⚡ You're in the sweet spot! Treat yourself to a delicious, nutrient-packed dish.";
+        healthQuote = "⚡ You're making a start! Explore a nutrient-packed dish.";
     } else if (healthCalories < healthGoal * 0.85f) {
-        healthQuote = "🎯 Perfect progress today! Smart choices lead to great energy.";
+        healthQuote = "🎯 Great progress! Smart choices help keep you energized.";
     } else if (healthCalories <= healthGoal) {
-        healthQuote = "✨ Almost at your daily goal! Fuel up with high-protein or lighter bites.";
+        healthQuote = "✨ You're approaching your daily goal. Choose thoughtfully.";
     } else {
-        healthQuote = "🏆 Goal achieved! Explore lightweight salads, green juices, or healthy desserts.";
+        healthQuote = "🏆 You've reached your calorie goal. Explore lighter options if suitable.";
     }
 
-    LocalTime now = LocalTime.now(ZoneId.of("Asia/Kolkata"));
+    ZoneId indiaZone = ZoneId.of("Asia/Kolkata");
+    LocalTime now = LocalTime.now(indiaZone);
+    LocalDate today = LocalDate.now(indiaZone);
+
+    String todayLabel =
+        today.format(DateTimeFormatter.ofPattern("EEE, dd MMM"));
+
+    /* BIRTHDAY SURPRISE — reads the saved birthday from the user table. */
+    boolean birthdayToday = false;
+    boolean showBirthdayPopup = false;
+    String birthdayCouponCode = "BIRTHDAY20";
+    String birthdayDisplayName = "Foodie";
+
+    if (loggedInUser != null && loggedInUser.getUserId() > 0) {
+        if (loggedInUser.getName() != null && !loggedInUser.getName().trim().isEmpty()) {
+            birthdayDisplayName = loggedInUser.getName().trim();
+        }
+
+        Connection birthdayCon = null;
+        try {
+            birthdayCon = DBConnection.getConnection();
+            if (birthdayCon != null) {
+                String birthdaySQL = "SELECT dateOfBirth FROM `user` WHERE userId = ?";
+                try (PreparedStatement birthdayPS = birthdayCon.prepareStatement(birthdaySQL)) {
+                    birthdayPS.setInt(1, loggedInUser.getUserId());
+                    try (ResultSet birthdayRS = birthdayPS.executeQuery()) {
+                        if (birthdayRS.next()) {
+                            java.sql.Date savedBirthday = birthdayRS.getDate("dateOfBirth");
+                            birthdayToday = savedBirthday != null
+                                && savedBirthday.toLocalDate().getMonthValue() == today.getMonthValue()
+                                && savedBirthday.toLocalDate().getDayOfMonth() == today.getDayOfMonth();
+                        }
+                    }
+                }
+            }
+        } catch (Exception birthdayException) {
+            // Keep the homepage working if the dateOfBirth column has not been added yet.
+            application.log("Unable to check SmartBite birthday. Ensure user.dateOfBirth exists and is saved from Profile.", birthdayException);
+        } finally {
+            if (birthdayCon != null) {
+                try {
+                    birthdayCon.close();
+                } catch (Exception birthdayCloseException) {
+                    application.log("Unable to close SmartBite birthday database connection.", birthdayCloseException);
+                }
+            }
+        }
+
+        String birthdayShownDate = (String) session.getAttribute("smartbiteBirthdayPopupDate");
+        String todayKey = today.toString();
+        if (birthdayToday && !todayKey.equals(birthdayShownDate)) {
+            showBirthdayPopup = true;
+            session.setAttribute("smartbiteBirthdayPopupDate", todayKey);
+        }
+    }
+
+    String birthdayDisplayNameEscaped = birthdayDisplayName
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&#39;");
+
+    /*
+     * DYNAMIC USER ORDER STREAK
+     *
+     * Uses the existing orders table.
+     * Each distinct calendar day counts once.
+     * Current streak remains active when the latest qualifying
+     * order day is today or yesterday.
+     *
+     * Current qualifying status: PLACED.
+     */
+
+    int currentOrderStreak = 0;
+    int nextStreakMilestone = 0;
+    int[] streakMilestones = {1, 2, 3, 4, 5, 6, 7};
+
+    if (loggedInUser != null && loggedInUser.getUserId() > 0) {
+        List<LocalDate> orderDays = new ArrayList<>();
+
+        String streakSQL =
+            "SELECT DISTINCT DATE(orderDate) AS order_day " +
+            "FROM orders " +
+            "WHERE userId = ? " +
+            "AND status = 'PLACED' " +
+            "AND orderDate IS NOT NULL " +
+            "ORDER BY order_day DESC";
+
+        Connection streakCon = null;
+        try {
+            streakCon = DBConnection.getConnection();
+
+            if (streakCon == null) {
+                application.log("Unable to calculate SmartBite order streak: database connection is unavailable.");
+            } else {
+                try (PreparedStatement streakPS = streakCon.prepareStatement(streakSQL)) {
+                    streakPS.setInt(1, loggedInUser.getUserId());
+
+                    try (ResultSet streakRS = streakPS.executeQuery()) {
+                        while (streakRS.next()) {
+                            java.sql.Date orderDate = streakRS.getDate("order_day");
+
+                            if (orderDate != null) {
+                                LocalDate orderDay = orderDate.toLocalDate();
+                                if (!orderDay.isAfter(today)) {
+                                    orderDays.add(orderDay);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!orderDays.isEmpty()) {
+                LocalDate latestOrderDay = orderDays.get(0);
+
+                if (!latestOrderDay.isBefore(today.minusDays(1))) {
+                    currentOrderStreak = 1;
+                    LocalDate previousDay = latestOrderDay;
+
+                    for (int i = 1; i < orderDays.size(); i++) {
+                        LocalDate orderDay = orderDays.get(i);
+
+                        if (previousDay.minusDays(1).equals(orderDay)) {
+                            currentOrderStreak++;
+                            previousDay = orderDay;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            application.log("Unable to calculate SmartBite order streak.", e);
+        } finally {
+            if (streakCon != null) {
+                try {
+                    streakCon.close();
+                } catch (Exception closeException) {
+                    application.log("Unable to close SmartBite streak database connection.", closeException);
+                }
+            }
+        }
+    }
+
+    for (int milestone : streakMilestones) {
+        if (currentOrderStreak < milestone) {
+            nextStreakMilestone = milestone;
+            break;
+        }
+    }
+
+    boolean sevenDayMilestoneReached = currentOrderStreak >= 7;
+
+    String[] streakRewardNames = {
+        "5% OFF", "10% OFF", "15% OFF", "20% OFF",
+        "25% OFF", "30% OFF", "40% OFF"
+    };
+    String[] streakCouponCodes = {
+        "BITE5", "BITE10", "BITE15", "SMART20",
+        "SMART25", "SMART30", "SMART40"
+    };
+    int[] streakRewardDays = {1, 2, 3, 4, 5, 6, 7};
+    int activeRewardIndex = -1;
+    if (loggedInUser != null && currentOrderStreak >= 1) {
+        activeRewardIndex = Math.min(currentOrderStreak, 7) - 1;
+    }
+
+    /*
+     * The current restaurant schema does not contain individual
+     * opening and closing times, so the existing common schedule
+     * is preserved.
+     */
     LocalTime openTime = LocalTime.of(10, 0);
     LocalTime closeTime = LocalTime.of(23, 0);
-    boolean isRestaurantOpen = !now.isBefore(openTime) && !now.isAfter(closeTime);
+
+    boolean isRestaurantOpen =
+        !now.isBefore(openTime) && !now.isAfter(closeTime);
 %>
 
 <!DOCTYPE html>
@@ -73,30 +261,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>SmartBite | Discover &amp; Order Food</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-<style type="text/css">
+<style>
 :root {
     --bg-page: #0d0d0f;
     --bg-card-dark: #121318;
-    --bg-card-bottom: #1e1e24; 
+    --bg-card-bottom: #1e1e24;
     --text-main: #ffffff;
     --text-muted: #a1a1aa;
     --text-bottom-main: #f4f4f5;
     --text-bottom-sub: #a1a1aa;
-    --nav-bg: rgba(13, 13, 15, 0.90);
-    --nav-border: rgba(255, 255, 255, 0.08);
-    --panel-border: rgba(255, 255, 255, 0.08);
-    --metric-bg: rgba(255, 255, 255, 0.04);
+    --nav-bg: rgba(13,13,15,.90);
+    --nav-border: rgba(255,255,255,.08);
+    --panel-border: rgba(255,255,255,.08);
+    --metric-bg: rgba(255,255,255,.04);
     --accent: #e23744;
-    --accent-glow: rgba(226, 55, 68, 0.35);
-    --accent-gradient: linear-gradient(135deg, #ff4757 0%, #e23744 100%);
+    --accent-glow: rgba(226,55,68,.35);
+    --accent-gradient: linear-gradient(135deg,#ff4757,#e23744);
     --green-badge: #24963f;
-    --shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+    --shadow: 0 16px 36px rgba(0,0,0,.4);
 }
 
 body.light-mode {
@@ -107,31 +296,32 @@ body.light-mode {
     --text-muted: #6b7280;
     --text-bottom-main: #111827;
     --text-bottom-sub: #4b5563;
-    --nav-bg: rgba(255, 255, 255, 0.95);
-    --nav-border: rgba(0, 0, 0, 0.08);
-    --panel-border: rgba(0, 0, 0, 0.08);
-    --metric-bg: rgba(0, 0, 0, 0.03);
-    --shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+    --nav-bg: rgba(255,255,255,.95);
+    --nav-border: rgba(0,0,0,.08);
+    --panel-border: rgba(0,0,0,.08);
+    --metric-bg: rgba(0,0,0,.03);
+    --shadow: 0 10px 25px rgba(0,0,0,.06);
 }
+
+* { box-sizing: border-box; }
 
 html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background-color: var(--bg-page) !important;
-    color: var(--text-main) !important;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    margin: 0;
+    padding: 0;
     min-height: 100vh;
     overflow-x: hidden;
+    background: var(--bg-page);
+    color: var(--text-main);
+    font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
-* {
-    box-sizing: border-box;
-}
+html { scroll-behavior: smooth; }
+
+a, button, input { font-family: inherit; }
 
 .navbar {
     background: var(--nav-bg);
     backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--nav-border);
     position: sticky;
     top: 0;
@@ -141,11 +331,12 @@ html, body {
 
 .nav-container {
     max-width: 1320px;
-    margin: 0 auto;
+    margin: auto;
     padding: 14px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
 }
 
 .logo {
@@ -153,12 +344,10 @@ html, body {
     font-weight: 800;
     color: var(--text-main);
     text-decoration: none;
-    letter-spacing: -0.5px;
+    letter-spacing: -.5px;
 }
 
-.logo span {
-    color: var(--accent);
-}
+.logo span { color: var(--accent); }
 
 .nav-links {
     display: flex;
@@ -176,123 +365,396 @@ html, body {
     gap: 6px;
 }
 
-.nav-links a:hover, .nav-links a.active {
+.nav-links a:hover,
+.nav-links a.active { color: var(--accent); }
+
+.profile-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--metric-bg);
+    border: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+/* SMARTBITE MINIMAL ELEGANT THEME CONTROL */
+.controls-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0;
+    margin-left: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.theme-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .18s ease;
+}
+
+.theme-mode-btn:hover,
+.theme-mode-btn.active {
     color: var(--accent);
 }
 
-.profile-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--metric-bg);
-    border: 1px solid var(--panel-border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    text-decoration: none;
-    transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.profile-avatar:hover {
-    transform: scale(1.08);
-    border-color: var(--accent);
-}
-
-.controls-box {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--metric-bg);
-    border: 1px solid var(--panel-border);
-    padding: 5px 12px;
-    border-radius: 30px;
-}
-
 .brightness-slider {
-    width: 60px;
-    height: 3px;
-    accent-color: var(--accent);
+    position: relative;
+    display: block;
+    flex: 0 0 54px;
+    width: 54px;
+    height: 12px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
     cursor: pointer;
-    background: var(--text-muted);
-    border-radius: 2px;
-    appearance: none;
+    touch-action: none;
+    user-select: none;
+    outline-offset: 3px;
 }
 
-.brightness-slider::-webkit-slider-thumb {
-    appearance: none;
-    width: 10px;
-    height: 10px;
+.brightness-track,
+.brightness-fill {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    height: 1px;
+    border-radius: 0;
+    transform: translateY(-50%);
+}
+
+.brightness-track {
+    width: 100%;
+    background: var(--text-muted);
+    opacity: .7;
+}
+
+.brightness-fill {
+    width: 50%;
+    background: var(--accent);
+}
+
+.brightness-thumb {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border: 0;
     border-radius: 50%;
     background: var(--accent);
-    cursor: pointer;
+    box-shadow: none;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
 }
 
-.theme-toggle-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    color: var(--text-main);
-}
+/* CINEMATIC HERO BACKGROUND */
 
 .hero-section {
-    background: linear-gradient(rgba(13, 13, 15, 0.75), rgba(13, 13, 15, 0.85)), url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1600&q=80');
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background:
+        linear-gradient(90deg,
+            rgba(8,7,8,.95) 0%,
+            rgba(10,8,9,.84) 44%,
+            rgba(10,8,9,.32) 100%),
+        linear-gradient(0deg,rgba(13,13,15,.8),transparent 50%),
+        url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=2000&q=90');
     background-size: cover;
-    background-position: center;
+    background-position: center 48%;
     color: white;
     padding: 100px 24px 90px;
-    text-align: center;
-    position: relative;
+    min-height: 470px;
+    display: flex;
+    align-items: center;
     border-bottom: 1px solid var(--panel-border);
 }
 
+.hero-section::after {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    width: 420px;
+    height: 420px;
+    right: -130px;
+    bottom: -240px;
+    border-radius: 50%;
+    background: rgba(226,55,68,.25);
+    filter: blur(100px);
+}
+
 .hero-content {
-    max-width: 760px;
-    margin: 0 auto;
+    max-width: 1320px;
+    width: 100%;
+    margin: auto;
     position: relative;
-    z-index: 2;
+    z-index: 1;
+}
+
+.hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 14px;
+    border: 1px solid rgba(255,255,255,.23);
+    border-radius: 30px;
+    background: rgba(255,255,255,.09);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 22px;
 }
 
 .hero-content h1 {
-    font-size: clamp(36px, 5vw, 54px);
+    max-width: 760px;
+    font-size: clamp(38px,5.6vw,68px);
     font-weight: 800;
-    margin-bottom: 16px;
-    line-height: 1.15;
-    letter-spacing: -1px;
-    color: #ffffff;
-    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    margin: 0 0 18px;
+    line-height: 1.08;
+    letter-spacing: -2px;
+    color: white;
 }
+
+.hero-content h1 span { color: #ff5969; }
 
 .hero-content p {
-    font-size: 16px;
+    max-width: 600px;
+    font-size: 15px;
     margin-bottom: 28px;
     color: #e2e8f0;
-    line-height: 1.6;
+    line-height: 1.9;
 }
 
-.hero-buttons {
+ .hero-buttons {
     display: flex;
     gap: 14px;
-    justify-content: center;
     flex-wrap: wrap;
 }
 
+/* HOMEPAGE ORDER-STREAK CARD — compact SmartBite hero styling */
+.hero-streak-card {
+    width: min(100%, 590px);
+    display: block;
+    margin: 0 0 22px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 16px;
+    background: linear-gradient(115deg,rgba(18,18,22,.97),rgba(48,22,28,.94));
+    color: #fff;
+    text-align: left;
+    box-shadow: 0 12px 30px rgba(0,0,0,.22);
+    transition: border-color .2s ease,box-shadow .2s ease;
+}
+
+.hero-streak-card:hover {
+    border-color: rgba(255,105,119,.55);
+    box-shadow: 0 15px 32px rgba(0,0,0,.28),0 0 0 2px rgba(226,55,68,.08);
+}
+
+.hero-streak-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.hero-streak-flame {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    background: rgba(226,55,68,.2);
+    border: 1px solid rgba(255,105,119,.3);
+    font-size: 21px;
+}
+
+.hero-streak-summary { flex: 1; min-width: 0; }
+
+.hero-streak-label {
+    display: block;
+    margin-bottom: 4px;
+    color: #ffb6bd;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.35px;
+    text-transform: uppercase;
+}
+
+.hero-streak-title {
+    display: block;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.4;
+}
+
+.hero-streak-subtitle {
+    display: block;
+    margin-top: 3px;
+    color: rgba(255,255,255,.72);
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.hero-streak-arrow {
+    flex: 0 0 auto;
+    color: #ff9ba5;
+    font-size: 22px;
+    padding-left: 5px;
+}
+
+.hero-streak-days {
+    display: grid;
+    grid-template-columns: repeat(7,minmax(0,1fr));
+    gap: 5px;
+    margin-top: 12px;
+}
+
+.hero-streak-day { min-width: 0; text-align: center; }
+
+.hero-streak-day-mark {
+    display: flex;
+    width: 31px;
+    max-width: 31px;
+    height: 31px;
+    margin: 0 auto 5px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 50%;
+    background: rgba(255,255,255,.07);
+    color: rgba(255,255,255,.8);
+    font-size: 15px;
+    font-weight: 800;
+}
+
+.hero-streak-day-mark.completed {
+    border-color: #e85d6b;
+    background: #c82e40;
+    color: #fff;
+}
+
+.hero-streak-day-mark.milestone:not(.completed) {
+    border-color: rgba(255,191,113,.7);
+    color: #ffd29a;
+}
+
+.hero-streak-day-label {
+    color: rgba(255,255,255,.62);
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.hero-streak-reward {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255,190,111,.22);
+    border-radius: 11px;
+    background: rgba(255,190,111,.07);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.hero-streak-reward-icon { color: #ffd08c; font-size: 16px; }
+.hero-streak-reward strong { color: #ffd08c; }
+.hero-streak-reward-copy { flex: 1 1 170px; min-width: 0; }
+.hero-streak-coupon-code {
+    display: inline-flex;
+    align-items: center;
+    margin: 4px 5px 0 0;
+    padding: 4px 8px;
+    border: 1px dashed rgba(255,155,165,.55);
+    border-radius: 6px;
+    background: rgba(15,15,19,.75);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .7px;
+}
+.hero-streak-copy-button {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid #e23744;
+    border-radius: 8px;
+    background: #e23744;
+    color: #fff;
+    font-family: inherit;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .55px;
+    cursor: pointer;
+    transition: background .2s ease,transform .2s ease;
+}
+.hero-streak-copy-button:hover:not(:disabled) { background: #c92b39; transform: translateY(-1px); }
+.hero-streak-copy-button:focus-visible { outline: 2px solid #ff9ba5; outline-offset: 2px; }
+.hero-streak-copy-button:disabled {
+    opacity: .48;
+    cursor: not-allowed;
+    filter: grayscale(.25);
+    box-shadow: none;
+}
+.hero-streak-reward-link {
+    flex: 0 0 auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #ffb3bc;
+    font: inherit;
+    font-weight: 800;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.hero-streak-reward-link:hover { color: #fff; }
+
 .btn-primary, .btn-secondary {
-    padding: 14px 28px;
+    padding: 14px 24px;
     border-radius: 12px;
     font-weight: 800;
-    font-size: 14px;
+    font-size: 13px;
     text-decoration: none;
     cursor: pointer;
     border: none;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
+    transition: transform .2s ease,background .2s ease;
 }
 
 .btn-primary {
@@ -302,11 +764,232 @@ html, body {
 }
 
 .btn-secondary {
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0,0,0,.48);
     color: white;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,.25);
 }
+
+.btn-primary:hover, .btn-secondary:hover {
+    transform: translateY(-3px);
+}
+
+/* THREE-SLIDE CINEMATIC CAROUSEL */
+
+.offers-section {
+    max-width: 1320px;
+    width: 100%;
+    margin: 36px auto 42px;
+    padding: 0 24px;
+}
+
+.offers-carousel {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    min-height: 365px;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: #100c0d;
+    box-shadow: 0 25px 65px rgba(0,0,0,.45);
+}
+
+.offer-slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    min-height: 365px;
+    padding: 48px 82px 66px;
+    overflow: hidden;
+    color: white;
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    visibility: hidden;
+    transform: scale(1.025);
+    transition: opacity .65s ease, transform 1s ease, visibility .65s;
+}
+
+.offer-slide.active {
+    position: relative;
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+}
+
+.offer-slide::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(9,7,8,.97),
+        rgba(12,7,9,.88) 38%,
+        rgba(14,7,8,.35) 75%,
+        rgba(10,6,7,.15)
+    );
+}
+
+.offer-slide.offer-signature {
+    background-image: url('https://images.unsplash.com/photo-1563379091339-03246963d96c?auto=format&fit=crop&w=1800&q=85');
+}
+
+.offer-slide.offer-discovery {
+    background-image: url('https://images.unsplash.com/photo-1547592180-85f173990554?auto=format&fit=crop&w=1800&q=85');
+}
+
+.offer-slide.offer-rewards {
+    background-image: url('https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?auto=format&fit=crop&w=1800&q=85');
+}
+
+.offer-copy {
+    position: relative;
+    z-index: 2;
+    max-width: 590px;
+}
+
+.offer-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 13px;
+    border: 1px solid rgba(255,255,255,.23);
+    border-radius: 30px;
+    background: rgba(255,255,255,.085);
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.offer-copy h2 {
+    margin: 22px 0 15px;
+    font-size: clamp(35px,4.3vw,57px);
+    font-weight: 800;
+    line-height: 1.08;
+    letter-spacing: -2px;
+    color: white;
+}
+
+.offer-copy h2 span {
+    color: #ff4b5d;
+    display: block;
+}
+
+.offer-copy p {
+    margin: 0;
+    max-width: 470px;
+    color: rgba(255,255,255,.8);
+    font-size: 14px;
+    line-height: 1.85;
+}
+
+.offer-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 17px;
+    margin-top: 27px;
+}
+
+.offer-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 13px;
+    min-height: 48px;
+    padding: 0 21px;
+    border-radius: 9px;
+    border: 1px solid #ff4b5d;
+    background: linear-gradient(135deg,#ff4b5d,#d81f38);
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    text-decoration: none;
+    transition: transform .2s ease;
+}
+
+.offer-cta:hover { transform: translateY(-3px); }
+
+.offer-note {
+    color: rgba(255,255,255,.8);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.offer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 5;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,.28);
+    border-radius: 50%;
+    background: rgba(15,12,13,.58);
+    color: white;
+    font-size: 26px;
+    cursor: pointer;
+}
+
+.offer-nav:hover { background: var(--accent); }
+.offer-prev { left: 18px; }
+.offer-next { right: 18px; }
+
+.offer-bottom-row {
+    position: absolute;
+    z-index: 4;
+    left: 82px;
+    right: 82px;
+    bottom: 23px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: none;
+}
+
+.offer-bottom-caption {
+    color: rgba(255,255,255,.65);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+
+.offer-dots {
+    display: flex;
+    gap: 7px;
+    pointer-events: auto;
+}
+
+.offer-dot {
+    width: 7px;
+    height: 7px;
+    padding: 0;
+    border: none;
+    border-radius: 10px;
+    background: rgba(255,255,255,.45);
+    cursor: pointer;
+}
+
+.offer-dot.active {
+    width: 27px;
+    background: #ff4b5d;
+}
+
+.offer-counter {
+    color: white;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.offer-counter span { color: #ff6876; }
+
+/* OFFERS AND REWARDS */
 
 .main-container {
     max-width: 1320px;
@@ -315,10 +998,269 @@ html, body {
     width: 100%;
 }
 
+.rewards-section {
+    display: none;
+    position: relative;
+    margin: 0 0 55px;
+}
+
+.rewards-section.rewards-visible {
+    display: block;
+}
+
+.rewards-section::before {
+    content: "";
+    position: absolute;
+    inset: -30px -24px;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse at 10% 15%,rgba(226,55,68,.13),transparent 45%),
+        radial-gradient(ellipse at 90% 85%,rgba(255,126,45,.09),transparent 45%);
+}
+
+.rewards-intro {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 20px;
+    margin-bottom: 22px;
+}
+
+.rewards-intro h2 {
+    margin: 0 0 8px;
+    font-size: clamp(23px,3vw,30px);
+    font-weight: 800;
+    letter-spacing: -.8px;
+}
+
+.rewards-intro p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.8;
+}
+
+.date-chip {
+    white-space: nowrap;
+    padding: 9px 13px;
+    border: 1px solid var(--panel-border);
+    border-radius: 25px;
+    background: var(--metric-bg);
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.rewards-grid {
+    display: grid;
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 20px;
+}
+
+.reward-card {
+    position: relative;
+    min-height: 300px;
+    overflow: hidden;
+    isolation: isolate;
+    padding: 25px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 20px;
+    background-color: #171419;
+    background-size: cover;
+    background-position: center;
+    box-shadow: 0 18px 40px rgba(0,0,0,.24);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform .25s ease,border-color .25s ease;
+}
+
+.reward-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+        155deg,
+        rgba(12,12,15,.66),
+        rgba(12,12,15,.94) 76%
+    );
+}
+
+.reward-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(255,75,93,.7);
+}
+
+.reward-card.streak {
+    background-image: url('https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=1000&q=85');
+}
+
+.reward-card.birthday {
+    background-image: url('https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1000&q=85');
+}
+
+.reward-card.restaurant-deals {
+    background-image: url('https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=1000&q=85');
+}
+
+.reward-card-content,
+.reward-card-footer {
+    position: relative;
+    z-index: 1;
+}
+
+.reward-icon {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 15px;
+    background: rgba(255,255,255,.13);
+    border: 1px solid rgba(255,255,255,.2);
+    font-size: 25px;
+    margin-bottom: 18px;
+}
+
+.reward-status {
+    display: inline-block;
+    padding: 7px 10px;
+    border-radius: 20px;
+    background: rgba(226,55,68,.2);
+    border: 1px solid rgba(255,110,120,.24);
+    color: #ffb0b7;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+}
+
+.reward-card h3 {
+    margin: 0 0 11px;
+    font-size: 21px;
+    line-height: 1.35;
+    font-weight: 800;
+    color: #fff;
+}
+
+.reward-card p {
+    margin: 0;
+    max-width: 380px;
+    font-size: 12px;
+    line-height: 1.85;
+    color: rgba(255,255,255,.84);
+}
+
+.reward-card-footer {
+    margin-top: 22px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255,255,255,.18);
+    color: rgba(255,255,255,.76);
+    font-size: 10px;
+    line-height: 1.8;
+    font-weight: 700;
+}
+
+.streak-progress {
+    display: grid;
+    grid-template-columns: repeat(7,minmax(0,1fr));
+    gap: 5px;
+    margin-top: 17px;
+}
+
+.streak-rewards-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.streak-reward-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 11px;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 10px;
+    background: rgba(0,0,0,.24);
+    color: rgba(255,255,255,.9);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.streak-reward-row .streak-reward-name { min-width: 0; }
+
+.streak-reward-row .streak-reward-status {
+    flex-shrink: 0;
+    color: #ffb0b7;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+}
+
+.streak-reward-row.earned {
+    border-color: rgba(74,222,128,.42);
+    background: rgba(36,150,63,.17);
+}
+
+.streak-reward-row.earned .streak-reward-status { color: #86efac; }
+
+.streak-day {
+    min-width: 0;
+    text-align: center;
+    color: rgba(255,255,255,.72);
+    font-size: 9px;
+    font-weight: 800;
+}
+
+.streak-day span {
+    display: flex;
+    min-height: 31px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 8px;
+    background: rgba(255,255,255,.08);
+    color: #fff;
+    font-size: 12px;
+}
+
+.streak-day span.milestone {
+    border-color: rgba(255,116,65,.65);
+    background: rgba(226,55,68,.22);
+}
+
+.streak-day span.completed {
+    border-color: rgba(74,222,128,.65);
+    background: rgba(36,150,63,.28);
+    color: #86efac;
+}
+
+.reward-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 17px;
+    color: #ff9aa4;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.reward-link:hover { color: #fff; }
+
+/* RESTAURANTS */
+
 .section-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
+    gap: 12px;
     margin-bottom: 20px;
 }
 
@@ -326,7 +1268,8 @@ html, body {
     font-size: 24px;
     font-weight: 800;
     color: var(--text-main);
-    letter-spacing: -0.5px;
+    letter-spacing: -.5px;
+    margin: 0;
 }
 
 .section-header a {
@@ -342,6 +1285,7 @@ html, body {
     width: 100%;
     margin: 0;
     padding: 0;
+    gap: 0;
 }
 
 .restaurant-square-card {
@@ -355,7 +1299,7 @@ html, body {
     display: flex;
     flex-direction: column;
     cursor: pointer;
-    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    transition: transform .2s ease,border-color .2s ease;
     box-shadow: var(--shadow);
 }
 
@@ -365,17 +1309,17 @@ html, body {
 }
 
 .card-part-top-black {
-    background: #0d0d0f !important;
-    color: #ffffff !important;
+    background: #0d0d0f;
+    color: white;
     padding-bottom: 12px;
     position: relative;
 }
 
 .card-img-box {
     position: relative;
-    height: 160px;
+    height: 180px;
     width: 100%;
-    background: #000000;
+    background: #000;
     overflow: hidden;
 }
 
@@ -383,6 +1327,11 @@ html, body {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transition: transform .4s ease;
+}
+
+.restaurant-square-card:hover .card-img-box img {
+    transform: scale(1.05);
 }
 
 .rating-badge {
@@ -390,7 +1339,7 @@ html, body {
     top: 10px;
     right: 10px;
     background: #24963f;
-    color: #ffffff;
+    color: white;
     font-size: 11px;
     font-weight: 800;
     padding: 4px 8px;
@@ -405,41 +1354,34 @@ html, body {
     font-weight: 800;
     padding: 4px 10px;
     border-radius: 6px;
-    color: #ffffff;
+    color: white;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    letter-spacing: .5px;
 }
 
-.status-badge.open {
-    background: #24963f;
-}
-
-.status-badge.closed {
-    background: #e23744;
-}
+.status-badge.open { background: #24963f; }
+.status-badge.closed { background: #e23744; }
 
 .restaurant-title-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin: 12px 14px 0 14px;
+    margin: 12px 14px 0;
 }
 
 .restaurant-title {
     font-size: 17px;
     font-weight: 800;
-    color: #ffffff !important;
+    color: white;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1;
 }
 
 .card-part-bottom-charcoal {
-    background: var(--bg-card-bottom) !important;
-    color: var(--text-bottom-main) !important;
-    padding: 12px 14px 14px 14px;
+    background: var(--bg-card-bottom);
+    color: var(--text-bottom-main);
+    padding: 12px 14px 14px;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -448,8 +1390,8 @@ html, body {
 
 .cuisine-text {
     font-size: 13px;
-    color: var(--text-bottom-sub) !important;
-    margin: 0 0 8px 0;
+    color: var(--text-bottom-sub);
+    margin: 0 0 8px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -458,18 +1400,15 @@ html, body {
 .timing-text {
     font-size: 12px;
     font-weight: 700;
-    color: #059669 !important;
+    color: #059669;
     margin-bottom: 12px;
-}
-
-body.light-mode .timing-text {
-    color: #047857 !important;
 }
 
 .meta-footer-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 8px;
     border-top: 1px solid var(--panel-border);
     padding-top: 10px;
     margin-top: auto;
@@ -477,20 +1416,21 @@ body.light-mode .timing-text {
 
 .delivery-time {
     font-size: 12px;
-    color: var(--text-bottom-sub) !important;
+    color: var(--text-bottom-sub);
     font-weight: 600;
 }
 
 .view-menu-btn-red {
-    background: #e23744 !important;
-    color: #ffffff !important;
+    background: #e23744;
+    color: white;
     padding: 7px 13px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 800;
-    text-decoration: none;
-    display: inline-block;
+    white-space: nowrap;
 }
+
+/* HEALTH DASHBOARD */
 
 .health-weather-grid {
     display: grid;
@@ -500,7 +1440,9 @@ body.light-mode .timing-text {
 }
 
 .panel-health {
-    background: linear-gradient(rgba(13, 13, 15, 0.88), rgba(13, 13, 15, 0.96)), url('https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1200&q=80');
+    background:
+        linear-gradient(rgba(13,13,15,.88),rgba(13,13,15,.96)),
+        url('https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1200&q=80');
     background-size: cover;
     background-position: center;
     border: 1px solid var(--panel-border);
@@ -512,24 +1454,21 @@ body.light-mode .timing-text {
 }
 
 body.light-mode .panel-health {
-    background: linear-gradient(rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.96)), url('https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1200&q=80');
+    background:
+        linear-gradient(rgba(255,255,255,.92),rgba(248,250,252,.96)),
+        url('https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1200&q=80');
     background-size: cover;
-    background-position: center;
 }
 
 .health-quote-banner {
-    background: rgba(226, 55, 68, 0.15);
-    border: 1px solid rgba(226, 55, 68, 0.35);
+    background: rgba(226,55,68,.15);
+    border: 1px solid rgba(226,55,68,.35);
     border-radius: 12px;
     padding: 12px 16px;
     font-size: 13px;
     font-weight: 700;
     color: #e23744;
     margin-bottom: 22px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    backdrop-filter: blur(8px);
 }
 
 .calorie-progress-container {
@@ -543,8 +1482,12 @@ body.light-mode .panel-health {
     position: relative;
     width: 100px;
     height: 100px;
+    flex-shrink: 0;
     border-radius: 50%;
-    background: conic-gradient(var(--accent) <%= circlePercentage %>%, rgba(0, 0, 0, 0.08) 0%);
+    background: conic-gradient(
+        var(--accent) <%= circlePercentage %>%,
+        rgba(128,128,128,.18) 0
+    );
     display: flex;
     align-items: center;
     justify-content: center;
@@ -565,7 +1508,6 @@ body.light-mode .panel-health {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
 }
 
 .conic-ring-text strong {
@@ -583,7 +1525,7 @@ body.light-mode .panel-health {
 
 .nutrition-metrics {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3,minmax(0,1fr));
     gap: 12px;
 }
 
@@ -593,20 +1535,13 @@ body.light-mode .panel-health {
     padding: 14px 10px;
     border-radius: 14px;
     text-align: center;
-    backdrop-filter: blur(6px);
-    transition: transform 0.2s ease, border-color 0.2s ease;
-}
-
-.metric-card-enhanced:hover {
-    transform: translateY(-3px);
-    border-color: rgba(226, 55, 68, 0.5);
 }
 
 .metric-card-enhanced span {
     font-size: 10px;
     color: var(--text-muted);
     font-weight: 800;
-    letter-spacing: 0.8px;
+    letter-spacing: .8px;
     text-transform: uppercase;
     display: block;
     margin-bottom: 4px;
@@ -618,8 +1553,12 @@ body.light-mode .panel-health {
     color: var(--text-main);
 }
 
+/* LIVE BENGALURU WEATHER */
+
 .panel-weather-animated {
-    background: linear-gradient(rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.96)), url('https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80');
+    background:
+        linear-gradient(rgba(15,23,42,.78),rgba(15,23,42,.96)),
+        url('https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80');
     background-size: cover;
     background-position: center;
     border: 1px solid var(--panel-border);
@@ -629,9 +1568,8 @@ body.light-mode .panel-health {
     flex-direction: column;
     justify-content: space-between;
     box-shadow: var(--shadow);
-    position: relative;
-    overflow: hidden;
-    color: #ffffff;
+    color: white;
+    min-height: 280px;
 }
 
 .weather-live-indicator {
@@ -641,13 +1579,11 @@ body.light-mode .panel-health {
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 1px;
-    text-transform: uppercase;
-    background: rgba(36, 150, 63, 0.25);
+    background: rgba(36,150,63,.25);
     color: #4ade80;
     padding: 5px 12px;
     border-radius: 20px;
-    border: 1px solid rgba(74, 222, 128, 0.4);
-    backdrop-filter: blur(6px);
+    border: 1px solid rgba(74,222,128,.4);
 }
 
 .live-dot {
@@ -659,15 +1595,15 @@ body.light-mode .panel-health {
 }
 
 @keyframes liveBlink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%,100% { opacity: 1; }
+    50% { opacity: .3; }
 }
 
 .weather-temp-hero {
     font-size: 42px;
     font-weight: 800;
-    color: #ffffff;
-    margin: 12px 0 2px 0;
+    color: white;
+    margin: 12px 0 2px;
     letter-spacing: -1px;
     display: flex;
     align-items: center;
@@ -678,19 +1614,13 @@ body.light-mode .panel-health {
     width: 58px;
     height: 58px;
     object-fit: contain;
-    filter: drop-shadow(0 10px 15px rgba(255, 184, 0, 0.4));
+    filter: drop-shadow(0 10px 15px rgba(255,184,0,.4));
     animation: float3DIcon 3.5s ease-in-out infinite;
 }
 
 @keyframes float3DIcon {
-    0%, 100% {
-        transform: translateY(0px) rotate(0deg);
-        filter: drop-shadow(0 10px 15px rgba(255, 184, 0, 0.4));
-    }
-    50% {
-        transform: translateY(-8px) rotate(3deg);
-        filter: drop-shadow(0 18px 25px rgba(255, 184, 0, 0.6));
-    }
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
 }
 
 .weather-condition-desc {
@@ -700,16 +1630,17 @@ body.light-mode .panel-health {
 }
 
 .weather-quote-box {
-    background: rgba(255, 255, 255, 0.08);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255,255,255,.08);
+    border-top: 1px solid rgba(255,255,255,.12);
     padding-top: 14px;
     margin-top: 20px;
     font-size: 13px;
     font-weight: 700;
     color: #f1f5f9;
-    line-height: 1.5;
-    backdrop-filter: blur(6px);
+    line-height: 1.6;
 }
+
+/* FOOTER */
 
 footer {
     background: var(--bg-card-dark);
@@ -722,260 +1653,1813 @@ footer {
     font-weight: 600;
 }
 
+/* RESPONSIVE LAYOUT */
+
 @media (max-width: 1200px) {
     .restaurant-square-card { width: 33.333%; }
 }
 
 @media (max-width: 900px) {
+    .nav-container { flex-wrap: wrap; gap: 14px; }
+    .nav-links { gap: 14px; flex-wrap: wrap; }
     .restaurant-square-card { width: 50%; }
     .health-weather-grid { grid-template-columns: 1fr; }
+    .rewards-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .offer-slide { padding: 42px 60px 70px; }
+    .offer-bottom-row { left: 60px; right: 60px; }
 }
 
 @media (max-width: 600px) {
+    .nav-container { padding: 12px 14px; }
+    .logo { font-size: 23px; }
+
+    .nav-links {
+        width: 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .nav-links a { font-size: 12px; }
+    .brightness-slider { flex-basis: 46px; width: 46px; }
+    .controls-box { gap: 6px; padding: 0; }
+
+    .hero-section {
+        min-height: 410px;
+        padding: 70px 18px 60px;
+        background-position: 60% center;
+    }
+
+    .hero-content h1 {
+        font-size: 35px;
+        letter-spacing: -1.3px;
+    }
+
+    .hero-content p { font-size: 14px; }
+
+    .hero-streak-card { padding: 12px; margin-bottom: 18px; }
+    .hero-streak-title { font-size: 14px; }
+    .hero-streak-subtitle { font-size: 10px; }
+    .hero-streak-days { gap: 3px; }
+    .hero-streak-day-mark { width: 27px; height: 27px; font-size: 13px; }
+    .hero-streak-day-label { font-size: 8px; }
+    .hero-streak-reward { align-items: center; font-size: 10px; }
+    .hero-streak-copy-button { padding: 8px 9px; font-size: 8px; }
+    .hero-streak-reward-link { white-space: normal; text-align: right; }
+
+    .offers-section {
+        margin: 22px auto 30px;
+        padding: 0 14px;
+    }
+
+    .offers-carousel, .offer-slide { min-height: 390px; }
+    .offers-carousel { border-radius: 18px; }
+
+    .offer-slide {
+        align-items: flex-start;
+        padding: 42px 25px 72px;
+        background-position: 60% center;
+    }
+
+    .offer-slide::before {
+        background: linear-gradient(
+            90deg,
+            rgba(9,7,8,.95),
+            rgba(12,7,9,.77) 70%,
+            rgba(12,7,9,.5)
+        );
+    }
+
+    .offer-copy h2 {
+        font-size: clamp(31px,8.5vw,42px);
+        line-height: 1.12;
+        letter-spacing: -1.3px;
+    }
+
+    .offer-copy p { font-size: 12px; line-height: 1.8; }
+    .offer-actions { gap: 12px; margin-top: 22px; }
+    .offer-cta { min-height: 43px; padding: 0 15px; font-size: 10px; }
+
+    .offer-nav {
+        top: auto;
+        bottom: 15px;
+        transform: none;
+        width: 31px;
+        height: 31px;
+        font-size: 20px;
+    }
+
+    .offer-prev { left: 15px; }
+    .offer-next { right: 15px; }
+
+    .offer-bottom-row {
+        left: 58px;
+        right: 58px;
+        bottom: 25px;
+        justify-content: center;
+    }
+
+    .offer-bottom-caption, .offer-counter { display: none; }
+
+    .main-container { margin: 28px auto; padding: 0 14px; }
+    .section-header h2 { font-size: 20px; }
+    .section-header a { font-size: 11px; }
+
+    .rewards-intro {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .rewards-grid { grid-template-columns: 1fr; }
+    .reward-card { min-height: 275px; padding: 22px; }
+
     .restaurant-square-card { width: 100%; }
+
+    .panel-health, .panel-weather-animated { padding: 20px; }
+    .calorie-progress-container { gap: 16px; }
+    .nutrition-metrics { gap: 8px; }
+    .metric-card-enhanced { padding: 12px 6px; }
+    .metric-card-enhanced strong { font-size: 16px; }
+
+    .hero-buttons { align-items: stretch; }
+
+    .hero-buttons .btn-primary,
+    .hero-buttons .btn-secondary {
+        max-width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+
+/* LIVE CART COUNT BADGE */
+.cart-nav-link {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+.cart-count-badge {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #e23744;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(226, 55, 68, .35);
+}
+
+.cart-count-badge.has-items {
+    display: inline-flex !important;
+}
+
+
+/* SMARTBITE LIVE CART COUNT */
+.cart-nav-link {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+}
+.cart-count-badge {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #e23744;
+    color: #ffffff !important;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(226, 55, 68, .35);
+}
+
+/* Birthday reward card styles — preserve the existing Offers & Rewards card. */
+.birthday-coupon-code {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 14px;
+    padding: 9px 13px;
+    border: 1px dashed rgba(255,255,255,.65);
+    border-radius: 10px;
+    background: rgba(226,55,68,.24);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+}
+.birthday-copy-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 11px 14px;
+    border: 0;
+    border-radius: 10px;
+    background: #e23744;
+    color: #fff;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .25px;
+    cursor: pointer;
+    transition: transform .2s ease, background .2s ease;
+}
+.birthday-copy-button:hover { background: #c92b39; transform: translateY(-1px); }
+
+/* BIRTHDAY SURPRISE — aligned with SmartBite's dark cards and red accent */
+.birthday-surprise-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+    background: rgba(5, 6, 9, .82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    animation: birthdayFadeIn .24s ease-out;
+}
+.birthday-surprise-overlay[hidden] { display: none !important; }
+.birthday-surprise-modal {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(205px, .82fr) minmax(0, 1.18fr);
+    width: min(100%, 620px);
+    aspect-ratio: 1 / 1;
+    max-height: calc(100vh - 44px);
+    overflow: hidden;
+    border: 1px solid var(--panel-border);
+    border-radius: 22px;
+    background: var(--bg-card-dark);
+    color: var(--text-main);
+    text-align: left;
+    box-shadow: 0 30px 90px rgba(0,0,0,.52), 0 0 0 1px rgba(226,55,68,.08);
+    animation: birthdayPopIn .32s cubic-bezier(.2,.8,.2,1);
+}
+.birthday-surprise-modal::before {
+    content: "";
+    position: absolute;
+    z-index: 4;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--accent-gradient);
+}
+.birthday-surprise-photo {
+    position: relative;
+    display: flex;
+    min-height: 0;
+    height: 100%;
+    align-items: flex-end;
+    padding: 27px;
+    overflow: hidden;
+    background-color: #171419;
+    background-image: linear-gradient(180deg, rgba(8,8,12,.02) 15%, rgba(8,8,12,.28) 48%, rgba(8,8,12,.93) 100%),
+        url('https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1400&q=90');
+    background-position: center;
+    background-size: cover;
+}
+.birthday-surprise-photo::before {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    top: -95px;
+    left: -95px;
+    border: 1px solid rgba(255,255,255,.26);
+    border-radius: 50%;
+    box-shadow: 0 0 0 22px rgba(255,255,255,.045), 0 0 0 45px rgba(255,255,255,.025);
+}
+.birthday-photo-caption { position: relative; z-index: 1; color: #fff; }
+.birthday-photo-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 13px;
+    color: #ffb2ba;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.55px;
+    text-transform: uppercase;
+}
+.birthday-photo-kicker::before {
+    content: "";
+    width: 21px;
+    height: 2px;
+    border-radius: 2px;
+    background: #e23744;
+}
+.birthday-photo-caption h3 {
+    max-width: 270px;
+    margin: 0;
+    color: #fff;
+    font-size: clamp(27px, 3.1vw, 35px);
+    line-height: 1.1;
+    font-weight: 800;
+    letter-spacing: -1.1px;
+}
+.birthday-photo-caption p {
+    max-width: 235px;
+    margin: 11px 0 0;
+    color: rgba(255,255,255,.78);
+    font-size: 12px;
+    line-height: 1.7;
+}
+.birthday-surprise-close {
+    position: absolute;
+    z-index: 5;
+    top: 14px;
+    right: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 35px;
+    height: 35px;
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 50%;
+    background: rgba(18,19,24,.86);
+    color: #fff;
+    font-size: 23px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 5px 18px rgba(0,0,0,.2);
+    transition: transform .2s ease, background .2s ease, border-color .2s ease;
+}
+.birthday-surprise-close:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: rotate(90deg);
+}
+.birthday-surprise-content {
+    position: relative;
+    overflow-y: auto;
+    padding: 27px 24px 21px;
+    background: var(--bg-card-dark);
+    color: var(--text-main);
+}
+.birthday-surprise-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #ff7b86;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.45px;
+    text-transform: uppercase;
+}
+.birthday-surprise-eyebrow::before {
+    content: "✦";
+    display: inline-flex;
+    width: 23px;
+    height: 23px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(226,55,68,.35);
+    border-radius: 8px;
+    background: rgba(226,55,68,.13);
+    color: #ff7b86;
+    font-size: 12px;
+}
+.birthday-surprise-modal h2 {
+    margin: 16px 0 9px;
+    color: var(--text-main);
+    font-size: clamp(27px, 3.1vw, 35px);
+    line-height: 1.12;
+    font-weight: 800;
+    letter-spacing: -1.1px;
+    overflow-wrap: anywhere;
+}
+.birthday-surprise-modal p {
+    margin: 0 0 19px;
+    max-width: 390px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.75;
+}
+.birthday-surprise-offer {
+    position: relative;
+    overflow: hidden;
+    padding: 17px 19px 16px;
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 15px;
+    background: var(--accent-gradient);
+    color: #fff;
+    box-shadow: 0 12px 25px rgba(226,55,68,.2);
+}
+.birthday-surprise-offer::after {
+    content: "%";
+    position: absolute;
+    top: -34px;
+    right: 8px;
+    color: rgba(255,255,255,.1);
+    font-size: 136px;
+    line-height: 1;
+    font-weight: 900;
+    pointer-events: none;
+}
+.birthday-offer-label {
+    position: relative;
+    z-index: 1;
+    color: rgba(255,255,255,.78);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1.45px;
+    text-transform: uppercase;
+}
+.birthday-offer-amount {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 5px;
+}
+.birthday-offer-amount strong {
+    color: #fff;
+    font-size: 34px;
+    line-height: 1.12;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+}
+.birthday-offer-amount span {
+    color: rgba(255,255,255,.92);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .8px;
+}
+.birthday-offer-terms {
+    position: relative;
+    z-index: 1;
+    margin-top: 6px;
+    color: rgba(255,255,255,.88);
+    font-size: 11px;
+    line-height: 1.5;
+}
+.birthday-surprise-coupon-panel {
+    margin-top: 12px;
+    padding: 13px 15px 12px;
+    border: 1px dashed var(--panel-border);
+    border-radius: 13px;
+    background: var(--metric-bg);
+}
+.birthday-surprise-coupon-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.birthday-surprise-coupon-top span:last-child { color: #ff7b86; }
+.birthday-surprise-code {
+    display: block;
+    margin-top: 7px;
+    color: var(--text-main);
+    font-size: clamp(21px, 2.4vw, 25px);
+    font-weight: 900;
+    letter-spacing: 2.2px;
+    line-height: 1.35;
+}
+.birthday-surprise-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+    margin-top: 13px;
+}
+.birthday-surprise-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 45px;
+    padding: 11px 15px;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    background: var(--accent);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 7px 16px rgba(226,55,68,.18);
+    transition: background .2s ease, border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.birthday-surprise-actions button:hover {
+    background: #c92b39;
+    border-color: #c92b39;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(226,55,68,.24);
+}
+.birthday-surprise-actions button.secondary {
+    border-color: var(--panel-border);
+    background: transparent;
+    color: var(--text-main);
+    box-shadow: none;
+}
+.birthday-surprise-actions button.secondary:hover {
+    background: var(--metric-bg);
+    border-color: rgba(226,55,68,.45);
+    box-shadow: none;
+}
+.birthday-copy-icon {
+    position: relative;
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    flex: 0 0 15px;
+    border: 1.6px solid currentColor;
+    border-radius: 3px;
+    opacity: .95;
+}
+.birthday-copy-icon::before {
+    content: "";
+    position: absolute;
+    top: -4px;
+    left: 3px;
+    width: 9px;
+    height: 11px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    background: var(--accent);
+}
+.birthday-surprise-actions button.secondary .birthday-copy-icon::before { background: var(--bg-card-dark); }
+.birthday-surprise-signoff {
+    margin-top: 13px;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.6;
+    text-align: center;
+}
+body.light-mode .birthday-surprise-photo { background-image: linear-gradient(180deg, rgba(8,8,12,.02) 15%, rgba(8,8,12,.28) 48%, rgba(8,8,12,.93) 100%), url('https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1400&q=90'); }
+body.light-mode .birthday-surprise-close { background: rgba(255,255,255,.94); color: #111827; border-color: rgba(0,0,0,.1); }
+body.light-mode .birthday-surprise-close:hover { background: var(--accent); color: #fff; }
+body.light-mode .birthday-surprise-coupon-panel { border-color: rgba(0,0,0,.18); }
+body.light-mode .birthday-surprise-actions button.secondary .birthday-copy-icon::before { background: #fff; }
+@keyframes birthdayFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes birthdayPopIn { from { opacity: 0; transform: translateY(14px) scale(.975); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 680px) {
+    .birthday-surprise-overlay { padding: 12px; }
+    .birthday-surprise-modal { display: block; width: min(100%, 470px); aspect-ratio: 1 / 1; height: auto; max-height: calc(100vh - 24px); border-radius: 18px; overflow-y: auto; }
+    .birthday-surprise-photo { min-height: 0; height: 118px; padding: 14px 18px; background-position: center 45%; }
+    .birthday-photo-kicker { margin-bottom: 7px; font-size: 8px; }
+    .birthday-photo-caption h3 { max-width: 260px; font-size: 25px; }
+    .birthday-photo-caption p { display: none; }
+    .birthday-surprise-content { padding: 18px 20px 16px; overflow: visible; }
+    .birthday-surprise-modal h2 { margin: 9px 0 6px; font-size: 25px; }
+    .birthday-surprise-modal p { margin-bottom: 10px; font-size: 11px; line-height: 1.55; }
+    .birthday-surprise-offer { padding: 12px 15px 11px; }
+    .birthday-offer-amount strong { font-size: 29px; }
+    .birthday-surprise-coupon-panel { margin-top: 9px; padding: 9px 12px 8px; }
+    .birthday-surprise-code { margin-top: 4px; font-size: 21px; }
+    .birthday-surprise-actions { gap: 7px; margin-top: 9px; }
+    .birthday-surprise-actions button { min-height: 39px; padding: 8px 12px; font-size: 11px; }
+    .birthday-surprise-signoff { margin-top: 8px; font-size: 9px; }
+    .birthday-surprise-close { top: 10px; right: 10px; width: 33px; height: 33px; }
+}
+@media (max-width: 380px) {
+    .birthday-surprise-content { padding: 15px 14px 14px; }
+    .birthday-surprise-photo { height: 102px; padding: 12px 15px; }
+    .birthday-photo-caption h3 { font-size: 22px; }
+    .birthday-surprise-coupon-top { font-size: 8px; letter-spacing: .65px; }
+    .birthday-offer-amount strong { font-size: 27px; }
+    .birthday-surprise-offer::after { font-size: 105px; top: -28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .birthday-surprise-overlay, .birthday-surprise-modal, .birthday-surprise-close, .birthday-surprise-actions button { animation: none; transition: none; }
 }
 </style>
 </head>
+
 <body>
 
-    <header class="navbar">
-        <div class="nav-container">
-            <a href="home.jsp" class="logo">Smart<span>Bite</span></a>
-            <nav class="nav-links">
-                <a href="home.jsp" class="active">Home</a>
-                <a href="restaurants">Restaurants</a>
-                <a href="orders.jsp" title="Orders">Orders</a>
-                <a href="cart.jsp" title="Cart">🛒 Cart</a>
-                <a href="profile.jsp" class="profile-avatar" title="Profile">👤</a>
-                
-                <div class="controls-box">
-                    <input type="range" min="0.5" max="1.5" step="0.05" value="1" class="brightness-slider" id="brightnessSlider" oninput="adjustBrightness(this.value)" title="Adjust Brightness">
-                    <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
-                        <span id="themeIcon">🌙</span>
-                    </button>
-                </div>
-            </nav>
-        </div>
-    </header>
+<header class="navbar">
+    <div class="nav-container">
+        <a href="home.jsp" class="logo">Smart<span>Bite</span></a>
 
-    <section class="hero-section">
-        <div class="hero-content">
-            <h1>Discover the best food &amp; drinks in Bengaluru</h1>
-            <p>Explore elite local kitchens, track your nutrition effortlessly, and let Tapu AI curate your next meal.</p>
-            <div class="hero-buttons">
-                <a href="restaurants" class="btn-primary">Explore Restaurants →</a>
-                <button type="button" class="btn-secondary" onclick="ftaAsk('what should i eat')">Ask BiteAI ✳</button>
+        <nav class="nav-links" aria-label="Main navigation">
+            <a href="home.jsp" class="active">Home</a>
+            <a href="restaurants">Restaurants</a>
+            <a href="orders.jsp" title="Orders">Orders</a>
+            <%
+                int smartBiteCartBadgeTotal = 0;
+                Object smartBiteCartBadgeObject = session.getAttribute("cart");
+                if (smartBiteCartBadgeObject instanceof List<?>) {
+                    for (Object smartBiteCartBadgeEntry : (List<?>) smartBiteCartBadgeObject) {
+                        if (smartBiteCartBadgeEntry instanceof CartItem) {
+                            CartItem smartBiteCartBadgeItem = (CartItem) smartBiteCartBadgeEntry;
+                            if (smartBiteCartBadgeItem.getMenu() != null && smartBiteCartBadgeItem.getQuantity() > 0) {
+                                smartBiteCartBadgeTotal += smartBiteCartBadgeItem.getQuantity();
+                            }
+                        }
+                    }
+                }
+            %>
+            <a href="<%= request.getContextPath() %>/cart.jsp" title="Cart" class="cart-nav-link" id="smartBiteCartNavLink" aria-label="Cart, <%= smartBiteCartBadgeTotal %> items">
+                🛒 Cart <span class="cart-count-badge<%= smartBiteCartBadgeTotal > 0 ? " has-items" : "" %>" id="smartBiteCartCount" aria-label="<%= smartBiteCartBadgeTotal %> items in cart"<%= smartBiteCartBadgeTotal > 0 ? "" : " hidden" %>><%= smartBiteCartBadgeTotal > 0 ? smartBiteCartBadgeTotal : "" %></span>
+            </a>
+            <a href="profile.jsp" class="profile-avatar" title="Profile">👤</a>
+
+            <div class="controls-box" aria-label="Theme and brightness controls">
+                <button type="button" class="theme-mode-btn" id="lightModeBtn"
+                        onclick="setThemeMode('light')" title="Light Mode"
+                        aria-label="Switch to Light Mode" aria-pressed="false">☀</button>
+
+                <div class="brightness-slider" id="brightnessSlider"
+                     role="slider" tabindex="0" aria-label="Adjust screen brightness"
+                     aria-valuemin="0.5" aria-valuemax="1.5" aria-valuenow="1"
+                     title="Drag to adjust brightness"
+                     onkeydown="handleBrightnessKeydown(event)">
+                    <span class="brightness-track" aria-hidden="true"></span>
+                    <span class="brightness-fill" id="brightnessFill" aria-hidden="true"></span>
+                    <span class="brightness-thumb" id="brightnessThumb" aria-hidden="true"></span>
+                </div>
+
+                <button type="button" class="theme-mode-btn" id="darkModeBtn"
+                        onclick="setThemeMode('dark')" title="Dark Mode"
+                        aria-label="Switch to Dark Mode" aria-pressed="true">☾</button>
             </div>
+        </nav>
+    </div>
+</header>
+
+<!-- CINEMATIC HERO -->
+
+<section class="hero-section">
+    <div class="hero-content">
+        <div class="hero-eyebrow">✦ GOOD FOOD. SMARTER CHOICES.</div>
+
+        <h1>
+            Discover the best food
+            <span>&amp; drinks in Bengaluru.</span>
+        </h1>
+
+        <p>
+            Explore local kitchens, discover your next favourite meal,
+            track your daily nutrition, and let BiteAI help you find
+            something delicious for every craving.
+        </p>
+
+        <!-- YOUR STREAKS: compact hero card with visible earned-coupon copy action -->
+        <div class="hero-streak-card" role="group" aria-label="Your Streaks and coupon rewards">
+            <div class="hero-streak-top">
+                <span class="hero-streak-flame" aria-hidden="true">🔥</span>
+                <span class="hero-streak-summary">
+                    <span class="hero-streak-label">Your Streaks</span>
+                    <span class="hero-streak-title">
+                        <% if (loggedInUser == null) { %>
+                            Start your SmartBite streak
+                        <% } else { %>
+                            <%= currentOrderStreak %> <%= currentOrderStreak == 1 ? "Day" : "Days" %> in a row
+                        <% } %>
+                    </span>
+                    <span class="hero-streak-subtitle">
+                        <% if (loggedInUser == null) { %>
+                            Sign in to track your order streak and unlock rewards.
+                        <% } else if (currentOrderStreak == 0) { %>
+                            Place your first order to begin your streak and unlock Day 1.
+                        <% } else { %>
+                            Keep ordering on consecutive days to unlock your next reward.
+                        <% } %>
+                    </span>
+                </span>
+            </div>
+
+            <div class="hero-streak-days" aria-label="Seven-day order streak progress">
+                <% for (int streakDay = 1; streakDay <= 7; streakDay++) {
+                       boolean streakDayCompleted = loggedInUser != null && currentOrderStreak >= streakDay;
+                       boolean streakDayMilestone = streakDay >= 1;
+                %>
+                    <div class="hero-streak-day">
+                        <span class="hero-streak-day-mark <%= streakDayCompleted ? "completed" : (streakDayMilestone ? "milestone" : "") %>" aria-label="Day <%= streakDay %><%= streakDayCompleted ? ", completed" : ", not completed" %>">🔥</span>
+                        <span class="hero-streak-day-label">Day <%= streakDay %></span>
+                    </div>
+                <% } %>
+            </div>
+
+            <div class="hero-streak-reward">
+                <span class="hero-streak-reward-icon" aria-hidden="true">🎁</span>
+                <span class="hero-streak-reward-copy">
+                    <% if (loggedInUser == null) { %>
+                        <strong>Rewards await.</strong> Sign in to view your streak rewards.
+                    <% } else if (currentOrderStreak >= 1 && activeRewardIndex >= 0) { %>
+                        <strong>Day <%= streakRewardDays[activeRewardIndex] %> reward unlocked!</strong>
+                        <%= streakRewardNames[activeRewardIndex] %>
+                        <span class="hero-streak-coupon-code"><%= streakCouponCodes[activeRewardIndex] %></span>
+                    <% } else { %>
+                        <strong>Start your streak today.</strong>
+                        Place your first order to unlock Day 1: 5% OFF · BITE5.
+                    <% } %>
+                </span>
+                <% if (loggedInUser != null && currentOrderStreak >= 1 && activeRewardIndex >= 0) { %>
+                    <button type="button" class="hero-streak-copy-button"
+                            data-coupon="<%= streakCouponCodes[activeRewardIndex] %>"
+                            aria-label="Copy earned coupon <%= streakCouponCodes[activeRewardIndex] %>"
+                            onclick="copyStreakCoupon(this)">▢ COPY COUPON</button>
+                <% } else { %>
+                    <button type="button" class="hero-streak-copy-button" disabled
+                            aria-label="Copy coupon after a reward is unlocked"
+                            title="Place an order to unlock a coupon">▢ COPY COUPON</button>
+                <% } %>
+                <button type="button" class="hero-streak-reward-link"
+                        aria-controls="smartbite-rewards"
+                        onclick="setRewardsVisibility(true, true)">View rewards →</button>
+            </div>
+        </div>
+
+        <div class="hero-buttons">
+            <a href="restaurants" class="btn-primary">
+                Explore Restaurants →
+            </a>
+
+            <button type="button" class="btn-secondary"
+                    onclick="ftaAsk('what should i eat')">
+                Ask BiteAI ✳
+            </button>
+
+            <button type="button"
+                    class="btn-secondary"
+                    id="showRewardsButton"
+                    aria-controls="smartbite-rewards"
+                    aria-expanded="false"
+                    onclick="toggleRewards()">
+                Offers &amp; Rewards Zone ✦
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ORIGINAL THREE CINEMATIC CAROUSEL SLIDES -->
+
+<section class="offers-section" aria-label="SmartBite featured highlights">
+    <div class="offers-carousel" id="offersCarousel"
+         aria-roledescription="carousel"
+         aria-label="Featured SmartBite highlights">
+
+        <article class="offer-slide offer-signature active"
+                 role="group" aria-roledescription="slide"
+                 aria-label="Highlight 1 of 3">
+            <div class="offer-copy">
+                <span class="offer-label">The SmartBite Selection</span>
+
+                <h2>A feast worth <span>craving.</span></h2>
+
+                <p>
+                    From comforting biryani to unforgettable local
+                    favourites, your next great meal is just a few taps away.
+                </p>
+
+                <div class="offer-actions">
+                    <a href="restaurants" class="offer-cta">
+                        EXPLORE RESTAURANTS <span aria-hidden="true">↗</span>
+                    </a>
+                    <span class="offer-note">✦ Discover your next favourite</span>
+                </div>
+            </div>
+        </article>
+
+        <article class="offer-slide offer-discovery"
+                 role="group" aria-roledescription="slide"
+                 aria-label="Highlight 2 of 3">
+            <div class="offer-copy">
+                <span class="offer-label">Your Next Food Adventure</span>
+
+                <h2>Follow your <span>flavour.</span></h2>
+
+                <p>
+                    Explore menus, discover dishes, and find something
+                    delicious for every kind of craving.
+                </p>
+
+                <div class="offer-actions">
+                    <a href="restaurants" class="offer-cta">
+                        FIND YOUR NEXT MEAL <span aria-hidden="true">↗</span>
+                    </a>
+                    <span class="offer-note">✦ Made for curious food lovers</span>
+                </div>
+            </div>
+        </article>
+
+        <article class="offer-slide offer-rewards"
+                 role="group" aria-roledescription="slide"
+                 aria-label="Highlight 3 of 3">
+            <div class="offer-copy">
+                <span class="offer-label">A Little More to Look Forward To</span>
+
+                <h2>Good food. <span>Great moments.</span></h2>
+
+                <p>
+                    Discover SmartBite rewards, celebrate special occasions,
+                    and work toward exciting food-ordering milestones.
+                </p>
+
+                <div class="offer-actions">
+                    <a href="#smartbite-rewards"
+                       class="offer-cta"
+                       data-open-rewards>
+                        EXPLORE REWARDS <span aria-hidden="true">↗</span>
+                    </a>
+                    <span class="offer-note">✦ Rewards for your journey</span>
+                </div>
+            </div>
+        </article>
+
+        <button type="button" class="offer-nav offer-prev"
+                id="offerPrev" aria-label="Previous highlight">&#8249;</button>
+
+        <button type="button" class="offer-nav offer-next"
+                id="offerNext" aria-label="Next highlight">&#8250;</button>
+
+        <div class="offer-bottom-row">
+            <span class="offer-bottom-caption">GOOD TASTE STARTS HERE</span>
+
+            <div class="offer-dots" id="offerDots" aria-label="Choose a highlight">
+                <button type="button" class="offer-dot active"
+                        aria-label="Show highlight 1" aria-current="true"></button>
+                <button type="button" class="offer-dot"
+                        aria-label="Show highlight 2"></button>
+                <button type="button" class="offer-dot"
+                        aria-label="Show highlight 3"></button>
+            </div>
+
+            <span class="offer-counter" id="offerCounter">
+                <span>01</span> / 03
+            </span>
+        </div>
+    </div>
+</section>
+
+<main class="main-container">
+
+    <!-- OFFERS AND REWARDS: HIDDEN UNTIL REQUESTED -->
+
+    <section class="rewards-section"
+             id="smartbite-rewards"
+             aria-label="SmartBite offers and rewards"
+             aria-hidden="true">
+
+        <div class="rewards-intro">
+            <div>
+                <h2>Offers &amp; Rewards</h2>
+                <p>
+                    Build your streak, celebrate special moments,
+                    and enjoy your SmartBite rewards.
+                </p>
+            </div>
+
+            <span class="date-chip">
+                TODAY · <%= todayLabel %>
+            </span>
+        </div>
+
+        <div class="rewards-grid">
+
+            <!-- 1. DYNAMIC ORDER STREAK REWARDS -->
+
+            <article class="reward-card streak">
+                <div class="reward-card-content">
+                    <div class="reward-icon">🔥</div>
+
+                    <span class="reward-status">Your Order Streak</span>
+
+                    <h3>
+                        <%= currentOrderStreak %>
+                        <%= currentOrderStreak == 1 ? "Day" : "Days" %>
+                        in a Row!
+                    </h3>
+
+                    <p>
+                        <% if (loggedInUser == null) { %>
+                            Log in to see your personal order streak.
+                        <% } else if (currentOrderStreak == 0) { %>
+                            Start your streak by placing an order today.
+                            Order on consecutive days to unlock milestones.
+                        <% } else if (sevenDayMilestoneReached) { %>
+                            Amazing consistency! Your seven-day streak
+                            milestone has been reached. Keep going to
+                            maintain your streak.
+                        <% } else { %>
+                            Great progress! Your next milestone is
+                            <%= nextStreakMilestone %> consecutive days.
+                            <%= nextStreakMilestone - currentOrderStreak %>
+                            more
+                            <%= nextStreakMilestone - currentOrderStreak == 1
+                                ? "day" : "days" %>
+                            to go.
+                        <% } %>
+                    </p>
+
+                    <div class="streak-progress"
+                         aria-label="Your seven-day streak progress">
+                        <% for (int day = 1; day <= 7; day++) {
+                               boolean completed = currentOrderStreak >= day;
+                               boolean milestone =
+                                   day >= 1 && day <= 7;
+                        %>
+                            <div class="streak-day">
+                                <span class="<%= completed ? "completed" : (milestone ? "milestone" : "") %>">
+                                    <%= completed ? "✓" : day %>
+                                </span>
+                                <%= day %> <%= day == 1 ? "day" : "days" %>
+                            </div>
+                        <% } %>
+                    </div>
+
+                    <div class="streak-rewards-list" aria-label="Streak milestone rewards">
+                        <% for (int i = 0; i < streakRewardDays.length; i++) {
+                               boolean rewardEarned = currentOrderStreak >= streakRewardDays[i];
+                        %>
+                            <div class="streak-reward-row <%= rewardEarned ? "earned" : "locked" %>">
+                                <span class="streak-reward-name">
+                                    Day <%= streakRewardDays[i] %> · <%= streakRewardNames[i] %> · <%= streakCouponCodes[i] %>
+                                </span>
+                                <span class="streak-reward-status">
+                                    <%= rewardEarned ? "🎁 Earned" : "🔒 Locked" %>
+                                </span>
+                                <% if (rewardEarned) { %>
+                                    <button type="button"
+                                            class="btn-secondary streak-copy-button"
+                                            data-coupon="<%= streakCouponCodes[i] %>"
+                                            onclick="copyStreakCoupon(this)">
+                                        Copy code
+                                    </button>
+                                <% } %>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <div class="reward-card-footer">
+                    <% if (loggedInUser == null) { %>
+                        Sign in to track your own streak.
+                    <% } else if (sevenDayMilestoneReached) { %>
+                        Seven consecutive days reached. Keep the streak alive and enjoy your Day 7 reward: 40% OFF · SMART40.
+                        Checkout must validate the coupon before any discount is applied.
+                    <% } else { %>
+                        Next milestone:
+                        <%= nextStreakMilestone %> consecutive days.
+                        Rewards: Day 1 BITE5, Day 2 BITE10, Day 3 BITE15, Day 4 SMART20, Day 5 SMART25, Day 6 SMART30 and Day 7 SMART40.
+                        Checkout must validate the selected coupon before any discount is applied.
+                    <% } %>
+                </div>
+            </article>
+
+            <!-- 2. BIRTHDAY SURPRISE -->
+
+            <article class="reward-card birthday">
+                <div class="reward-card-content">
+                    <span class="reward-status"><%= birthdayToday ? "Birthday Reward Unlocked" : "Birthday Special" %></span>
+
+                    <h3><%= birthdayToday ? "Your birthday treat is ready" : "Your Birthday, Your Treat" %></h3>
+
+                    <p>
+                        <%= birthdayToday
+                            ? "A little something for your special day. Copy your code and keep it ready for checkout."
+                            : "Save your birthday in Profile and we’ll have a little something ready for your special day." %>
+                    </p>
+
+                    <% if (birthdayToday) { %>
+                        <div class="birthday-coupon-code"><%= birthdayCouponCode %></div>
+                        <button type="button" class="birthday-copy-button"
+                                data-coupon="<%= birthdayCouponCode %>"
+                                onclick="copyStreakCoupon(this)">
+                            <span class="birthday-copy-icon" aria-hidden="true"></span>
+                            Copy birthday code
+                        </button>
+                    <% } else { %>
+                        <a href="profile.jsp" class="reward-link">
+                            Add birthday in Profile <span>↗</span>
+                        </a>
+                    <% } %>
+                </div>
+
+                <div class="reward-card-footer">
+                    <%= birthdayToday
+                        ? "20% off up to ₹150 on eligible orders of ₹299 or more. The code must be validated at checkout."
+                        : "Birthday offer: BIRTHDAY20 · 20% off up to ₹150 · minimum eligible order ₹299." %>
+                </div>
+            </article>
+
+            <!-- 3. DAILY RESTAURANT DEALS -->
+
+            <article class="reward-card restaurant-deals">
+                <div class="reward-card-content">
+                    <div class="reward-icon">🍽️</div>
+
+                    <span class="reward-status">Daily Offers</span>
+
+                    <h3>Today's Local Favourites</h3>
+
+                    <p>
+                        Discover limited-time restaurant deals, eligible
+                        menu discounts, daily specials, and promotional
+                        offers from participating restaurants.
+                    </p>
+
+                    <a href="restaurants" class="reward-link">
+                        Explore restaurants <span>↗</span>
+                    </a>
+                </div>
+
+                <div class="reward-card-footer">
+                    Only offers verified as active in the backend should
+                    be advertised as available today. No live discount is
+                    claimed by this preview.
+                </div>
+            </article>
+
         </div>
     </section>
 
-    <main class="main-container">
+    <!-- RESTAURANT LISTINGS -->
 
-        <section>
-            <div class="section-header">
-                <h2>Trending Restaurants</h2>
-                <a href="restaurants">See all restaurants →</a>
-            </div>
+    <section id="trending-restaurants">
+        <div class="section-header">
+            <h2>Trending Restaurants</h2>
+            <a href="restaurants">See all restaurants →</a>
+        </div>
 
-            <div class="restaurant-grid-wrapper">
-                <%
-                    Connection con = null;
-                    PreparedStatement ps = null;
-                    ResultSet rs = null;
+        <div class="restaurant-grid-wrapper">
+            <%
+                Connection con = null;
+                PreparedStatement ps = null;
+                ResultSet rs = null;
+                boolean foundRestaurants = false;
 
-                    try {
-                        con = DBConnection.getConnection();
-                        String sql = "SELECT restaurantId, name, cuisineType, deliveryTime, rating, imagePath FROM restaurant ORDER BY restaurantId";
-                        ps = con.prepareStatement(sql);
-                        rs = ps.executeQuery();
+                try {
+                    con = DBConnection.getConnection();
 
-                        while (rs.next()) {
-                            int restaurantId = rs.getInt("restaurantId");
-                            String name = rs.getString("name");
-                            String cuisine = rs.getString("cuisineType");
-                            String image = rs.getString("imagePath");
-                            int delivery = rs.getInt("deliveryTime");
-                            double rating = rs.getDouble("rating");
+                    String sql =
+                        "SELECT restaurantId, name, cuisineType, deliveryTime, rating, imagePath " +
+                        "FROM restaurant ORDER BY restaurantId";
 
-                            if (name == null) name = "Biryani House";
-                            if (cuisine == null) cuisine = "Indian, Biryani";
-                            if (image == null) image = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80";
-                %>
+                    ps = con.prepareStatement(sql);
+                    rs = ps.executeQuery();
 
-                <form action="menu" method="get" onclick="this.submit();" class="restaurant-square-card">
-                    <input type="hidden" name="restaurantId" value="<%= restaurantId %>">
-                    
+                    while (rs.next()) {
+                        foundRestaurants = true;
+
+                        int restaurantId = rs.getInt("restaurantId");
+                        String name = rs.getString("name");
+                        String cuisine = rs.getString("cuisineType");
+                        String image = rs.getString("imagePath");
+                        int delivery = rs.getInt("deliveryTime");
+                        double rating = rs.getDouble("rating");
+
+                        if (name == null) name = "Restaurant";
+                        if (cuisine == null) cuisine = "Local favourites";
+
+                        if (image == null || image.trim().isEmpty()) {
+                            image = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80";
+                        }
+
+                        String safeName = name.replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                            .replace("\"", "&quot;")
+                            .replace("'", "&#39;");
+
+                        String safeCuisine = cuisine.replace("&", "&amp;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;")
+                            .replace("\"", "&quot;")
+                            .replace("'", "&#39;");
+
+                        String safeImage = image.replace("&", "&amp;")
+                            .replace("\"", "&quot;")
+                            .replace("<", "&lt;")
+                            .replace(">", "&gt;");
+            %>
+
+            <form action="menu" method="get" class="restaurant-square-card">
+                <input type="hidden" name="restaurantId"
+                       value="<%= restaurantId %>">
+
+                <button type="submit"
+                        style="border:0;padding:0;margin:0;text-align:left;background:transparent;color:inherit;display:flex;flex-direction:column;width:100%;height:100%;cursor:pointer;">
+
                     <div class="card-part-top-black">
                         <div class="card-img-box">
-                            <img src="<%= image %>" alt="<%= name %>">
-                            
+                            <img src="<%= safeImage %>"
+                                 alt="<%= safeName %>">
+
                             <% if (isRestaurantOpen) { %>
                                 <span class="status-badge open">OPEN</span>
                             <% } else { %>
                                 <span class="status-badge closed">CLOSED</span>
                             <% } %>
 
-                            <span class="rating-badge">★ <%= String.format("%.1f", rating) %></span>
+                            <span class="rating-badge">
+                                ★ <%= String.format(java.util.Locale.US, "%.1f", rating) %>
+                            </span>
                         </div>
-                        
+
                         <div class="restaurant-title-row">
-                            <div class="restaurant-title"><%= name %></div>
+                            <div class="restaurant-title"><%= safeName %></div>
                         </div>
                     </div>
 
                     <div class="card-part-bottom-charcoal">
-                        <div class="cuisine-text"><%= cuisine %></div>
+                        <div class="cuisine-text"><%= safeCuisine %></div>
                         <div class="timing-text">🕒 10:00 AM - 11:00 PM</div>
+
                         <div class="meta-footer-row">
                             <span class="delivery-time">◷ <%= delivery %> mins</span>
                             <span class="view-menu-btn-red">View Menu →</span>
                         </div>
                     </div>
-                </form>
+                </button>
+            </form>
 
-                <%
-                        }
-                    } catch (Exception e) {
-                        application.log("Error loading restaurants", e);
-                    } finally {
-                        if (rs != null) try { rs.close(); } catch(Exception e){}
-                        if (ps != null) try { ps.close(); } catch(Exception e){}
-                        if (con != null) try { con.close(); } catch(Exception e){}
+            <%
                     }
-                %>
-            </div>
-        </section>
 
-        <section class="health-weather-grid">
-            
-            <div class="panel-health">
-                <div class="health-quote-banner">
-                    <%= healthQuote %>
+                    if (!foundRestaurants) {
+            %>
+                <p style="padding:16px;color:var(--text-muted);">
+                    No restaurants are available right now.
+                </p>
+            <%
+                    }
+                } catch (Exception e) {
+                    application.log("Error loading restaurants", e);
+            %>
+                <p style="padding:16px;color:var(--text-muted);">
+                    Restaurants are temporarily unavailable. Please try again.
+                </p>
+            <%
+                } finally {
+                    if (rs != null) try { rs.close(); } catch (Exception e) {}
+                    if (ps != null) try { ps.close(); } catch (Exception e) {}
+                    if (con != null) try { con.close(); } catch (Exception e) {}
+                }
+            %>
+        </div>
+    </section>
+
+    <!-- HEALTH SUMMARY AND LIVE WEATHER -->
+
+    <section class="health-weather-grid">
+
+        <div class="panel-health">
+            <div class="health-quote-banner"><%= healthQuote %></div>
+
+            <div class="calorie-progress-container">
+                <div class="conic-ring-box">
+                    <div class="conic-ring-text">
+                        <strong><%= circlePercentage %>%</strong>
+                        <span>Goal</span>
+                    </div>
                 </div>
 
-                <div class="calorie-progress-container">
-                    <div class="conic-ring-box">
-                        <div class="conic-ring-text">
-                            <strong><%= circlePercentage %>%</strong>
-                            <span>Goal</span>
-                        </div>
-                    </div>
-
-                    <div>
-                        <div style="font-size: 24px; font-weight: 800; color: var(--text-main);"><%= String.format("%.0f", healthCalories) %> <span style="font-size: 14px; color: var(--text-muted);">/ <%= String.format("%.0f", healthGoal) %> kcal</span></div>
-                        <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px; font-weight: 600;"><%= String.format("%.0f", healthRemaining) %> kcal remaining for today</div>
-                    </div>
-                </div>
-
-                <div class="nutrition-metrics">
-                    <div class="metric-card-enhanced">
-                        <span>Protein</span>
-                        <strong><%= String.format("%.1f", healthSummary.getProtein()) %>g</strong>
-                    </div>
-                    <div class="metric-card-enhanced">
-                        <span>Carbs</span>
-                        <strong><%= String.format("%.1f", healthSummary.getCarbs()) %>g</strong>
-                    </div>
-                    <div class="metric-card-enhanced">
-                        <span>Fiber</span>
-                        <strong><%= String.format("%.1f", healthSummary.getFiber()) %>g</strong>
-                    </div>
-                </div>
-            </div>
-
-            <div class="panel-weather-animated">
                 <div>
-                    <div class="weather-live-indicator">
-                        <span class="live-dot"></span> BENGALURU • LIVE
+                    <div style="font-size:24px;font-weight:800;color:var(--text-main);">
+                        <%= String.format(java.util.Locale.US, "%.0f", healthCalories) %>
+                        <span style="font-size:14px;color:var(--text-muted);">
+                            / <%= String.format(java.util.Locale.US, "%.0f", healthGoal) %> kcal
+                        </span>
                     </div>
-                    
-                    <div class="weather-temp-hero">
-                        <span id="weatherTemperature">--°C</span>
-                        <img id="weatherIcon3D" class="weather-icon-3d-animated" src="https://cdn-icons-png.flaticon.com/512/1163/1163661.png" alt="Live Weather">
-                    </div>
-                    
-                    <div class="weather-condition-desc" id="weatherCondition">Fetching live weather...</div>
-                </div>
 
-                <div class="weather-quote-box" id="weatherRecommendation">
-                    🍽️ Perfect weather to pair your favorite dishes with hot beverages or fresh bowls!
+                    <div style="font-size:13px;color:var(--text-muted);margin-top:4px;font-weight:600;">
+                        <%= String.format(java.util.Locale.US, "%.0f", healthRemaining) %>
+                        kcal remaining for today
+                    </div>
                 </div>
             </div>
 
-        </section>
+            <div class="nutrition-metrics">
+                <div class="metric-card-enhanced">
+                    <span>Protein</span>
+                    <strong><%= String.format(java.util.Locale.US, "%.1f", healthSummary.getProtein()) %>g</strong>
+                </div>
 
-    </main>
+                <div class="metric-card-enhanced">
+                    <span>Carbs</span>
+                    <strong><%= String.format(java.util.Locale.US, "%.1f", healthSummary.getCarbs()) %>g</strong>
+                </div>
 
-    <%@ include file="ai-assistant.jsp" %>
+                <div class="metric-card-enhanced">
+                    <span>Fiber</span>
+                    <strong><%= String.format(java.util.Locale.US, "%.1f", healthSummary.getFiber()) %>g</strong>
+                </div>
+            </div>
+        </div>
 
-    <footer>
-        <p>&copy; 2026 SmartBite Delivery Platform. All rights reserved.</p>
-    </footer>
+        <div class="panel-weather-animated">
+            <div>
+                <div class="weather-live-indicator">
+                    <span class="live-dot"></span> BENGALURU • LIVE
+                </div>
 
-    <script>
-        (function() {
-            const savedTheme = localStorage.getItem("smartbite_theme");
-            if (savedTheme === "light") {
-                document.body.classList.add("light-mode");
+                <div class="weather-temp-hero">
+                    <span id="weatherTemperature">--°C</span>
+                    <img id="weatherIcon3D"
+                         class="weather-icon-3d-animated"
+                         src="https://cdn-icons-png.flaticon.com/512/1163/1163661.png"
+                         alt="Live Weather">
+                </div>
+
+                <div class="weather-condition-desc" id="weatherCondition">
+                    Fetching live weather...
+                </div>
+            </div>
+
+            <div class="weather-quote-box" id="weatherRecommendation">
+                🍽️ Find a meal that suits the weather and your cravings.
+            </div>
+        </div>
+
+    </section>
+
+</main>
+
+<!-- PRESERVE EXISTING BITEAI ASSISTANT -->
+
+<%@ include file="ai-assistant.jsp" %>
+
+<footer>
+    <p>&copy; 2026 SmartBite Delivery Platform. All rights reserved.</p>
+</footer>
+
+<% if (showBirthdayPopup) { %>
+<div class="birthday-surprise-overlay" id="birthdaySurpriseOverlay"
+     role="presentation" onclick="closeBirthdaySurpriseFromBackdrop(event)">
+    <section class="birthday-surprise-modal" role="dialog" aria-modal="true"
+             aria-labelledby="birthdaySurpriseTitle" aria-describedby="birthdaySurpriseDescription">
+        <button type="button" class="birthday-surprise-close" aria-label="Close birthday surprise"
+                onclick="closeBirthdaySurprise()">&times;</button>
+
+        <div class="birthday-surprise-photo" role="img" aria-label="Birthday cake with candles">
+            <div class="birthday-photo-caption">
+                <span class="birthday-photo-kicker">YOUR DAY. YOUR TREAT.</span>
+                <h3>A little birthday treat.</h3>
+                <p>Something delicious for your next order.</p>
+            </div>
+        </div>
+
+        <div class="birthday-surprise-content">
+            <div class="birthday-surprise-eyebrow">A birthday treat from SmartBite</div>
+            <h2 id="birthdaySurpriseTitle">Happy birthday, <%= birthdayDisplayNameEscaped %>!</h2>
+            <p id="birthdaySurpriseDescription">Make the day a little sweeter with a treat for your next order.</p>
+
+            <div class="birthday-surprise-offer" aria-label="Birthday offer: 20 percent off, up to 150 rupees">
+                <div class="birthday-offer-label">Your birthday treat</div>
+                <div class="birthday-offer-amount"><strong>20% OFF</strong><span>UP TO ₹150</span></div>
+                <div class="birthday-offer-terms">On eligible orders of ₹299 or more</div>
+            </div>
+
+            <div class="birthday-surprise-coupon-panel">
+                <div class="birthday-surprise-coupon-top">
+                    <span>Your birthday code</span>
+                    <span>Just for you</span>
+                </div>
+                <div class="birthday-surprise-code"><%= birthdayCouponCode %></div>
+            </div>
+
+            <div class="birthday-surprise-actions">
+                <button type="button" data-coupon="<%= birthdayCouponCode %>" onclick="copyStreakCoupon(this)">
+                    <span class="birthday-copy-icon" aria-hidden="true"></span>
+                    Copy birthday code
+                </button>
+                <button type="button" class="secondary" onclick="closeBirthdaySurprise(); setRewardsVisibility(true, true);">Browse offers</button>
+            </div>
+            <div class="birthday-surprise-signoff">Have a lovely birthday. &mdash; Team SmartBite</div>
+        </div>
+    </section>
+</div>
+<% } %>
+
+<script>
+/* BIRTHDAY SURPRISE POPUP */
+function closeBirthdaySurprise() {
+    const overlay = document.getElementById("birthdaySurpriseOverlay");
+    if (overlay) overlay.remove();
+}
+function closeBirthdaySurpriseFromBackdrop(event) {
+    if (event && event.target && event.target.id === "birthdaySurpriseOverlay") {
+        closeBirthdaySurprise();
+    }
+}
+document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") closeBirthdaySurprise();
+});
+
+/* OFFERS AND REWARDS: REVEAL, HIDE AND SCROLL */
+
+function setRewardsVisibility(visible, shouldScroll) {
+    const rewardsSection = document.getElementById("smartbite-rewards");
+    const rewardsButton = document.getElementById("showRewardsButton");
+
+    if (!rewardsSection || !rewardsButton) return;
+
+    rewardsSection.classList.toggle("rewards-visible", visible);
+    rewardsSection.setAttribute("aria-hidden", visible ? "false" : "true");
+    rewardsButton.setAttribute("aria-expanded", visible ? "true" : "false");
+
+    rewardsButton.textContent = visible
+        ? "Hide Offers & Rewards ✕"
+        : "Offers & Rewards Zone ✦";
+
+    if (visible && shouldScroll) {
+        window.setTimeout(function () {
+            rewardsSection.scrollIntoView({
+                behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                    ? "auto"
+                    : "smooth",
+                block: "start"
+            });
+        }, 50);
+    }
+}
+
+function toggleRewards() {
+    const rewardsSection = document.getElementById("smartbite-rewards");
+
+    if (!rewardsSection) return;
+
+    const isVisible =
+        rewardsSection.classList.contains("rewards-visible");
+
+    setRewardsVisibility(!isVisible, !isVisible);
+}
+
+document.querySelectorAll("[data-open-rewards]").forEach(function (link) {
+    link.addEventListener("click", function (event) {
+        event.preventDefault();
+        setRewardsVisibility(true, true);
+    });
+});
+
+/* RESTORE SAVED THEME AND BRIGHTNESS SETTINGS */
+
+(function () {
+    try {
+        const savedTheme = localStorage.getItem("smartbite_theme");
+        const savedBrightness = localStorage.getItem("smartbite_brightness");
+
+        if (savedTheme === "light") {
+            document.body.classList.add("light-mode");
+        } else {
+            document.body.classList.remove("light-mode");
+        }
+
+        if (savedBrightness !== null) {
+            const brightness = parseFloat(savedBrightness);
+
+            if (!Number.isNaN(brightness) &&
+                brightness >= 0.5 && brightness <= 1.5) {
+                adjustBrightness(brightness);
+            } else {
+                updateBrightnessSlider(1);
             }
-            updateThemeButtonUI();
-        })();
+        } else {
+            updateBrightnessSlider(1);
+        }
+    } catch (e) {
+        updateBrightnessSlider(1);
+        console.log("Unable to restore saved display settings.");
+    }
 
-        window.addEventListener("load", function () {
-            fetch("https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=77.5946&current=temperature_2m,weather_code&timezone=Asia%2FKolkata")
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.current) return;
-                    const temp = Math.round(data.current.temperature_2m);
-                    const code = data.current.weather_code;
+    updateThemeButtonUI();
+})();
 
-                    document.getElementById("weatherTemperature").textContent = temp + "°C";
+/* CINEMATIC THREE-SLIDE CAROUSEL */
 
-                    let condition = "Pleasant Weather";
-                    let icon3D = "https://cdn-icons-png.flaticon.com/512/1163/1163661.png";
-                    let quote = "🍽️ Perfect weather for ordering your favorite hot meals or refreshing drinks!";
+(function () {
+    const carousel = document.getElementById("offersCarousel");
+    if (!carousel) return;
 
-                    if (temp > 30) {
-                        condition = "Sunny & Warm";
-                        icon3D = "https://cdn-icons-png.flaticon.com/512/869/869869.png";
-                        quote = "🥤 It's warm outside! Cool off with chilled beverages, fresh smoothies & light salads.";
-                    } else if (temp < 22) {
-                        condition = "Cool Breeze";
-                        icon3D = "https://cdn-icons-png.flaticon.com/512/3054/3054889.png";
-                        quote = "🍲 Chilly weather vibes! Treat yourself to hot soups, biryani, or steaming chai.";
-                    } else if (code >= 51) {
-                        condition = "Rainy Vibes";
-                        icon3D = "https://cdn-icons-png.flaticon.com/512/1163/1163657.png";
-                        quote = "🌧️ Rainy weather calls for crispy starters, hot noodles & comforting bowls!";
-                    }
+    const slides = Array.from(carousel.querySelectorAll(".offer-slide"));
+    const dots = Array.from(carousel.querySelectorAll(".offer-dot"));
+    const previous = document.getElementById("offerPrev");
+    const next = document.getElementById("offerNext");
+    const counter = document.getElementById("offerCounter");
 
-                    document.getElementById("weatherCondition").textContent = condition;
-                    document.getElementById("weatherIcon3D").src = icon3D;
-                    document.getElementById("weatherRecommendation").textContent = quote;
-                })
-                .catch(err => console.log(err));
+    if (!slides.length || dots.length !== slides.length ||
+        !previous || !next) {
+        return;
+    }
+
+    let currentIndex = 0;
+    let rotationTimer = null;
+    const rotationDelay = 6000;
+    const reducedMotion =
+        window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    function showSlide(index) {
+        currentIndex = (index + slides.length) % slides.length;
+
+        slides.forEach(function (slide, i) {
+            const active = i === currentIndex;
+            slide.classList.toggle("active", active);
+            slide.setAttribute("aria-hidden", active ? "false" : "true");
         });
 
-        function toggleTheme() {
-            document.body.classList.toggle("light-mode");
-            const isLight = document.body.classList.contains("light-mode");
-            localStorage.setItem("smartbite_theme", isLight ? "light" : "dark");
-            updateThemeButtonUI();
-        }
+        dots.forEach(function (dot, i) {
+            const active = i === currentIndex;
+            dot.classList.toggle("active", active);
 
-        function updateThemeButtonUI() {
-            const isLight = document.body.classList.contains("light-mode");
-            const themeIcon = document.getElementById("themeIcon");
-            if (themeIcon) {
-                themeIcon.textContent = isLight ? "☀️" : "🌙";
+            if (active) {
+                dot.setAttribute("aria-current", "true");
+            } else {
+                dot.removeAttribute("aria-current");
             }
-        }
+        });
 
-        function adjustBrightness(val) {
-            document.documentElement.style.filter = "brightness(" + val + ")";
-            localStorage.setItem("smartbite_brightness", val);
+        if (counter) {
+            counter.innerHTML =
+                "<span>" + String(currentIndex + 1).padStart(2, "0") +
+                "</span> / " + String(slides.length).padStart(2, "0");
         }
-    </script>
+    }
 
+    function stopRotation() {
+        if (rotationTimer !== null) {
+            clearInterval(rotationTimer);
+            rotationTimer = null;
+        }
+    }
+
+    function startRotation() {
+        stopRotation();
+
+        if (reducedMotion.matches || document.hidden) return;
+
+        rotationTimer = setInterval(function () {
+            if (!carousel.matches(":hover") &&
+                !carousel.contains(document.activeElement)) {
+                showSlide(currentIndex + 1);
+            }
+        }, rotationDelay);
+    }
+
+    previous.addEventListener("click", function () {
+        showSlide(currentIndex - 1);
+        startRotation();
+    });
+
+    next.addEventListener("click", function () {
+        showSlide(currentIndex + 1);
+        startRotation();
+    });
+
+    dots.forEach(function (dot, index) {
+        dot.addEventListener("click", function () {
+            showSlide(index);
+            startRotation();
+        });
+    });
+
+    carousel.addEventListener("mouseenter", stopRotation);
+    carousel.addEventListener("mouseleave", startRotation);
+    carousel.addEventListener("focusin", stopRotation);
+
+    carousel.addEventListener("focusout", function (event) {
+        if (!carousel.contains(event.relatedTarget)) {
+            startRotation();
+        }
+    });
+
+    document.addEventListener("visibilitychange", function () {
+        if (document.hidden) {
+            stopRotation();
+        } else {
+            startRotation();
+        }
+    });
+
+    if (typeof reducedMotion.addEventListener === "function") {
+        reducedMotion.addEventListener("change", startRotation);
+    }
+
+    showSlide(0);
+    startRotation();
+})();
+
+/* LIVE BENGALURU WEATHER */
+
+window.addEventListener("load", function () {
+    fetch("https://api.open-meteo.com/v1/forecast?latitude=12.9716&longitude=77.5946&current=temperature_2m,weather_code&timezone=Asia%2FKolkata")
+        .then(function (response) {
+            if (!response.ok) {
+                throw new Error(
+                    "Weather service returned HTTP " + response.status
+                );
+            }
+            return response.json();
+        })
+        .then(function (data) {
+            if (!data.current) return;
+
+            const temp = Math.round(data.current.temperature_2m);
+            const code = data.current.weather_code;
+
+            document.getElementById("weatherTemperature").textContent =
+                temp + "°C";
+
+            let condition = "Pleasant Weather";
+            let icon =
+                "https://cdn-icons-png.flaticon.com/512/1163/1163661.png";
+            let quote =
+                "🍽️ Explore your favourite meals or refreshing drinks.";
+
+            if (code >= 51 && code <= 99) {
+                condition = "Rainy Vibes";
+                icon =
+                    "https://cdn-icons-png.flaticon.com/512/1163/1163657.png";
+                quote =
+                    "🌧️ Rainy weather calls for crispy starters, hot noodles and comforting bowls!";
+            } else if (temp > 30) {
+                condition = "Sunny & Warm";
+                icon =
+                    "https://cdn-icons-png.flaticon.com/512/869/869869.png";
+                quote =
+                    "🥤 Cool off with chilled beverages, fresh smoothies and light salads.";
+            } else if (temp < 22) {
+                condition = "Cool Breeze";
+                icon =
+                    "https://cdn-icons-png.flaticon.com/512/3054/3054889.png";
+                quote =
+                    "🍲 Cooler weather? Explore hot soups, biryani or steaming chai.";
+            }
+
+            document.getElementById("weatherCondition").textContent =
+                condition;
+
+            document.getElementById("weatherIcon3D").src = icon;
+
+            document.getElementById("weatherRecommendation").textContent =
+                quote;
+        })
+        .catch(function (error) {
+            console.log("Unable to load live weather:", error);
+
+            document.getElementById("weatherCondition").textContent =
+                "Weather currently unavailable";
+
+            document.getElementById("weatherRecommendation").textContent =
+                "🍽️ Explore SmartBite and find a meal you'll love.";
+        });
+});
+
+/* LIGHT/DARK THEME */
+
+function setThemeMode(mode) {
+    const isLight = mode === "light";
+    document.body.classList.toggle("light-mode", isLight);
+
+    try {
+        localStorage.setItem("smartbite_theme", isLight ? "light" : "dark");
+    } catch (e) {
+        console.log("Unable to save theme preference.");
+    }
+
+    updateThemeButtonUI();
+}
+
+function toggleTheme() {
+    const isLight = document.body.classList.contains("light-mode");
+    setThemeMode(isLight ? "dark" : "light");
+}
+
+function updateThemeButtonUI() {
+    const isLight = document.body.classList.contains("light-mode");
+    const lightButton = document.getElementById("lightModeBtn");
+    const darkButton = document.getElementById("darkModeBtn");
+
+    if (lightButton) {
+        lightButton.classList.toggle("active", isLight);
+        lightButton.setAttribute("aria-pressed", String(isLight));
+    }
+    if (darkButton) {
+        darkButton.classList.toggle("active", !isLight);
+        darkButton.setAttribute("aria-pressed", String(!isLight));
+    }
+}
+
+/* COPY STREAK COUPON */
+function copyStreakCoupon(button) {
+    if (!button) {
+        return;
+    }
+
+    const coupon = (button.getAttribute("data-coupon") || "").trim();
+    if (!coupon) {
+        return;
+    }
+
+    function showCopiedMessage(success) {
+        const originalText = button.textContent;
+        button.textContent = success ? "Copied!" : "Copy manually: " + coupon;
+        if (success) {
+            button.setAttribute("aria-label", "Coupon " + coupon + " copied");
+        }
+        window.setTimeout(function () {
+            button.textContent = originalText;
+        }, 1800);
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(coupon)
+            .then(function () {
+                showCopiedMessage(true);
+            })
+            .catch(function () {
+                copyStreakCouponFallback(coupon, button, showCopiedMessage);
+            });
+    } else {
+        copyStreakCouponFallback(coupon, button, showCopiedMessage);
+    }
+}
+
+function copyStreakCouponFallback(coupon, button, showCopiedMessage) {
+    const field = document.createElement("textarea");
+    field.value = coupon;
+    field.setAttribute("readonly", "readonly");
+    field.style.position = "fixed";
+    field.style.left = "-9999px";
+    document.body.appendChild(field);
+    field.select();
+
+    let copied = false;
+    try {
+        copied = document.execCommand("copy");
+    } catch (error) {
+        copied = false;
+    } finally {
+        document.body.removeChild(field);
+    }
+
+    if (copied) {
+        showCopiedMessage(true);
+    } else {
+        const originalText = button.textContent;
+        button.textContent = "Copy manually: " + coupon;
+        window.setTimeout(function () {
+            button.textContent = originalText;
+        }, 2500);
+    }
+}
+
+/* ULTRA-SLIM LINE BRIGHTNESS CONTROL */
+
+let brightnessDragActive = false;
+
+function updateBrightnessSlider(value) {
+    const brightness = Math.min(1.5, Math.max(0.5, parseFloat(value) || 1));
+    const percentage = ((brightness - 0.5) / 1.0) * 100;
+    const slider = document.getElementById("brightnessSlider");
+    const fill = document.getElementById("brightnessFill");
+    const thumb = document.getElementById("brightnessThumb");
+
+    if (fill) fill.style.width = percentage + "%";
+    if (thumb) thumb.style.left = percentage + "%";
+    if (slider) slider.setAttribute("aria-valuenow", brightness.toFixed(2));
+}
+
+function adjustBrightness(value) {
+    const brightness = parseFloat(value);
+
+    if (Number.isNaN(brightness) || brightness < 0.5 || brightness > 1.5) {
+        return;
+    }
+
+    document.documentElement.style.filter = "brightness(" + brightness + ")";
+    updateBrightnessSlider(brightness);
+
+    try {
+        localStorage.setItem("smartbite_brightness", String(brightness));
+    } catch (e) {
+        console.log("Unable to save brightness preference.");
+    }
+}
+
+(function attachBrightnessPointerEvents() {
+    const slider = document.getElementById("brightnessSlider");
+    if (!slider) return;
+    slider.addEventListener("pointerdown", startBrightnessDrag);
+    slider.addEventListener("pointermove", moveBrightnessDrag);
+    slider.addEventListener("pointerup", stopBrightnessDrag);
+    slider.addEventListener("pointercancel", stopBrightnessDrag);
+    slider.addEventListener("lostpointercapture", stopBrightnessDrag);
+})();
+
+function startBrightnessDrag(event) {
+    if (event.button !== undefined && event.button !== 0) return;
+    brightnessDragActive = true;
+    if (event.currentTarget && event.currentTarget.setPointerCapture && event.pointerId !== undefined) {
+        try { event.currentTarget.setPointerCapture(event.pointerId); } catch (e) { /* Pointer capture may be unavailable. */ }
+    }
+    updateBrightnessFromPointer(event);
+    event.preventDefault();
+}
+
+function moveBrightnessDrag(event) {
+    if (!brightnessDragActive) return;
+    updateBrightnessFromPointer(event);
+    event.preventDefault();
+}
+
+function stopBrightnessDrag() {
+    brightnessDragActive = false;
+}
+
+function updateBrightnessFromPointer(event) {
+    const slider = document.getElementById("brightnessSlider");
+    if (!slider) return;
+
+    const rect = slider.getBoundingClientRect();
+    if (!rect.width) return;
+
+    const percentage = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+    const brightness = 0.5 + percentage;
+    adjustBrightness(brightness);
+}
+
+function handleBrightnessKeydown(event) {
+    const slider = document.getElementById("brightnessSlider");
+    if (!slider) return;
+
+    const current = parseFloat(slider.getAttribute("aria-valuenow")) || 1;
+    let next = current;
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") next = current - 0.05;
+    else if (event.key === "ArrowRight" || event.key === "ArrowUp") next = current + 0.05;
+    else if (event.key === "Home") next = 0.5;
+    else if (event.key === "End") next = 1.5;
+    else return;
+
+    event.preventDefault();
+    adjustBrightness(Math.min(1.5, Math.max(0.5, Math.round(next * 100) / 100)));
+}
+</script>
+
+
+<script>
+/* Always fetch the authoritative cart quantity from the current session. */
+(function () {
+    const badge = document.getElementById("smartBiteCartCount");
+    const cartLink = document.getElementById("smartBiteCartNavLink");
+    if (!badge || !cartLink) return;
+
+    const countUrl = "<%= request.getContextPath() %>/cart-count.jsp";
+    let requestInProgress = false;
+
+    async function refreshSmartBiteCartCount() {
+        if (requestInProgress || document.visibilityState === "hidden") return;
+        requestInProgress = true;
+        try {
+            const response = await fetch(countUrl + "?t=" + Date.now(), {
+                method: "GET",
+                credentials: "same-origin",
+                cache: "no-store",
+                headers: { "Accept": "text/plain" }
+            });
+            if (!response.ok) return;
+            const rawCount = (await response.text()).trim();
+            if (!/^\d+$/.test(rawCount)) return;
+            const count = Number(rawCount);
+            badge.textContent = count > 0 ? String(count) : "";
+            badge.classList.toggle("has-items", count > 0);
+            badge.hidden = count <= 0;
+            badge.setAttribute("aria-label", count + " items in cart");
+            cartLink.setAttribute("aria-label", "Cart, " + count + " items");
+        } catch (error) {
+            console.debug("SmartBite cart count will retry on the next refresh.");
+        } finally {
+            requestInProgress = false;
+        }
+    }
+
+    window.addEventListener("pageshow", refreshSmartBiteCartCount);
+    window.addEventListener("focus", refreshSmartBiteCartCount);
+    document.addEventListener("visibilitychange", refreshSmartBiteCartCount);
+    refreshSmartBiteCartCount();
+    window.setInterval(refreshSmartBiteCartCount, 2500);
+})();
+</script>
 </body>
 </html>
