@@ -24,6 +24,17 @@ RUN find . -name "*.java" -not -path "./.git/*" -print > sources.txt \
 RUN find . -maxdepth 1 -name "*.jsp" \
     -exec cp {} /usr/local/tomcat/webapps/ROOT/ \;
 
+RUN printf '%s\n' \
+    '<?xml version="1.0" encoding="UTF-8"?>' \
+    '<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee" version="6.0">' \
+    '    <welcome-file-list>' \
+    '        <welcome-file>welcome.jsp</welcome-file>' \
+    '        <welcome-file>index.jsp</welcome-file>' \
+    '        <welcome-file>home.jsp</welcome-file>' \
+    '    </welcome-file-list>' \
+    '</web-app>' \
+    > /usr/local/tomcat/webapps/ROOT/WEB-INF/web.xml
+
 EXPOSE 8080
 
 CMD ["catalina.sh", "run"]
