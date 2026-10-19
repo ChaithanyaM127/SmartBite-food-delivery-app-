@@ -17,7 +17,7 @@ RUN curl -fsSL https://repo.maven.apache.org/maven2/com/mysql/mysql-connector-j/
 RUN find . -name "*.java" -not -path "./.git/*" -print > sources.txt \
     && test -s sources.txt \
     && javac -encoding UTF-8 \
-       -cp "/usr/local/tomcat/lib/*:./lib/*" \
+       -cp "/usr/local/tomcat/lib/*" \
        -d /usr/local/tomcat/webapps/ROOT/WEB-INF/classes \
        @sources.txt
 
