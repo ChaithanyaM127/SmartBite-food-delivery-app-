@@ -1,4 +1,7 @@
+
 package com.foodtap.model;
+
+import java.time.LocalDate;
 
 public class User {
 
@@ -9,6 +12,7 @@ public class User {
     private String phone;
     private String address;
     private String role;
+    private LocalDate dateOfBirth;
 
     public User() {
     }
@@ -90,5 +94,13 @@ public class User {
 
     public void setRole(String role) {
         this.role = role;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
     }
 }
