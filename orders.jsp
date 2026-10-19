@@ -1,3 +1,4 @@
+
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <%@ page import="java.util.List" %>
 <%@ page import="java.util.ArrayList" %>
@@ -37,7 +38,7 @@
 :root {
     --bg-page: #0d0d0f;
     --bg-card-dark: #121318;
-    --bg-card-bottom: #1e1e24; 
+    --bg-card-bottom: #1e1e24;
     --text-main: #ffffff;
     --text-muted: #a1a1aa;
     --text-bottom-main: #f4f4f5;
@@ -91,7 +92,7 @@ body.light-mode {
     box-sizing: border-box;
 }
 
-/* Glassmorphism Sticky Navbar */
+/* Navbar */
 .navbar {
     background: var(--nav-bg);
     backdrop-filter: blur(12px);
@@ -130,7 +131,7 @@ body.light-mode {
     align-items: center;
 }
 
-.nav-links a {
+.nav-links > a:not(.profile-avatar) {
     text-decoration: none;
     color: var(--text-muted);
     font-size: 14px;
@@ -140,71 +141,136 @@ body.light-mode {
     gap: 6px;
 }
 
-.nav-links a:hover, .nav-links a.active {
+.nav-links > a:not(.profile-avatar):hover,
+.nav-links > a.active {
     color: var(--accent);
 }
 
-.profile-avatar {
-    width: 36px;
-    height: 36px;
+/* Profile icon matches the Cart and Restaurants pages */
+.nav-links > a.profile-avatar {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    margin: 0;
     border-radius: 50%;
     background: var(--metric-bg);
     border: 1px solid var(--panel-border);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1;
     text-decoration: none;
+    flex-shrink: 0;
     transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-.profile-avatar:hover {
-    transform: scale(1.08);
+.nav-links > a.profile-avatar:hover {
+    transform: scale(1.06);
     border-color: var(--accent);
 }
 
+/* Theme and brightness controls match the Cart page */
 .controls-box {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    background: var(--metric-bg);
-    border: 1px solid var(--panel-border);
-    padding: 5px 12px;
-    border-radius: 30px;
+    justify-content: center;
+    gap: 8px;
+    padding: 0;
+    margin-left: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    flex-shrink: 0;
+}
+
+.theme-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.18s ease;
+}
+
+.theme-mode-btn:hover,
+.theme-mode-btn.active {
+    color: var(--accent);
 }
 
 .brightness-slider {
-    width: 60px;
-    height: 3px;
-    accent-color: var(--accent);
+    position: relative;
+    display: block;
+    flex: 0 0 54px;
+    width: 54px;
+    height: 12px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
     cursor: pointer;
-    background: var(--text-muted);
-    border-radius: 2px;
-    appearance: none;
+    touch-action: none;
+    user-select: none;
+    outline-offset: 3px;
 }
 
-.brightness-slider::-webkit-slider-thumb {
-    appearance: none;
-    width: 10px;
-    height: 10px;
+.brightness-track,
+.brightness-fill {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    height: 1px;
+    border-radius: 0;
+    transform: translateY(-50%);
+}
+
+.brightness-track {
+    width: 100%;
+    background: var(--text-muted);
+    opacity: 0.7;
+}
+
+.brightness-fill {
+    width: 50%;
+    background: var(--accent);
+}
+
+.brightness-thumb {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border: 0;
     border-radius: 50%;
     background: var(--accent);
-    cursor: pointer;
+    box-shadow: none;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
 }
 
-.theme-toggle-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    color: var(--text-main);
+/* Brightness affects page content, not navbar or its controls */
+#smartbite-page-content {
+    filter: brightness(1);
+    transition: filter 0.12s ease;
 }
 
-/* Container */
+/* Orders container */
 .container {
     width: 92%;
     max-width: 1000px;
@@ -397,143 +463,429 @@ footer {
     font-weight: 600;
 }
 
+@media (max-width: 900px) {
+    .nav-container {
+        padding: 12px 16px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .nav-links {
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+}
+
 @media (max-width: 700px) {
-    .container { width: 94%; margin-top: 25px; }
-    .page-title { font-size: 24px; }
-    .order-details { grid-template-columns: repeat(2, 1fr); }
-    .order-top { align-items: flex-start; gap: 12px; }
+    .container {
+        width: 94%;
+        margin-top: 25px;
+    }
+
+    .page-title {
+        font-size: 24px;
+    }
+
+    .order-details {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .order-top {
+        align-items: flex-start;
+        gap: 12px;
+    }
+}
+
+@media (max-width: 600px) {
+    .nav-container {
+        align-items: flex-start;
+    }
+
+    .logo {
+        font-size: 23px;
+    }
+
+    .nav-links {
+        width: 100%;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+    .nav-links > a:not(.profile-avatar) {
+        font-size: 12px;
+    }
+
+    .controls-box {
+        gap: 5px;
+    }
+
+    .brightness-slider {
+        flex-basis: 42px;
+        width: 42px;
+    }
 }
 
 @media (max-width: 480px) {
-    .order-details { grid-template-columns: 1fr; }
-    .order-top { flex-direction: column; align-items: flex-start; }
-    .order-card { padding: 18px; }
-    .order-actions { flex-direction: column; }
-    .action-btn { text-align: center; width: 100%; }
+    .order-details {
+        grid-template-columns: 1fr;
+    }
+
+    .order-top {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .order-card {
+        padding: 18px;
+    }
+
+    .order-actions {
+        flex-direction: column;
+    }
+
+    .action-btn {
+        text-align: center;
+        width: 100%;
+    }
 }
 </style>
 </head>
+
 <body>
 
     <!-- Navbar -->
     <header class="navbar">
         <div class="nav-container">
             <a href="home.jsp" class="logo">Smart<span>Bite</span></a>
+
             <nav class="nav-links">
                 <a href="home.jsp">Home</a>
                 <a href="restaurants">Restaurants</a>
                 <a href="orders.jsp" title="Orders" class="active">Orders</a>
                 <a href="cart.jsp" title="Cart">🛒 Cart</a>
-                <a href="profile.jsp" class="profile-avatar" title="Profile">👤</a>
-                
-                <div class="controls-box">
-                    <input type="range" min="0.5" max="1.5" step="0.05" value="1" class="brightness-slider" id="brightnessSlider" oninput="adjustBrightness(this.value)" title="Adjust Brightness">
-                    <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
-                        <span id="themeIcon">☀️</span>
-                    </button>
+                <a href="profile.jsp" class="profile-avatar" title="Profile" aria-label="Profile">👤</a>
+
+                <div class="controls-box" aria-label="Theme and brightness controls">
+                    <button type="button"
+                            class="theme-mode-btn"
+                            id="lightModeBtn"
+                            onclick="setThemeMode('light')"
+                            title="Light Mode"
+                            aria-label="Switch to Light Mode"
+                            aria-pressed="false">☀</button>
+
+                    <div class="brightness-slider"
+                         id="brightnessSlider"
+                         role="slider"
+                         tabindex="0"
+                         aria-label="Adjust screen brightness"
+                         aria-valuemin="0.5"
+                         aria-valuemax="1.5"
+                         aria-valuenow="1"
+                         title="Drag to adjust brightness">
+                        <span class="brightness-track" aria-hidden="true"></span>
+                        <span class="brightness-fill" id="brightnessFill" aria-hidden="true"></span>
+                        <span class="brightness-thumb" id="brightnessThumb" aria-hidden="true"></span>
+                    </div>
+
+                    <button type="button"
+                            class="theme-mode-btn"
+                            id="darkModeBtn"
+                            onclick="setThemeMode('dark')"
+                            title="Dark Mode"
+                            aria-label="Switch to Dark Mode"
+                            aria-pressed="true">☾</button>
                 </div>
             </nav>
         </div>
     </header>
 
-<div class="container">
+    <main class="container" id="smartbite-page-content">
 
-<h1 class="page-title">My Orders</h1>
-<p class="welcome">Hello, <strong><%= user != null ? user.getName() : "User" %></strong> — here are your recent orders.</p>
+        <h1 class="page-title">My Orders</h1>
+        <p class="welcome">Hello, <strong><%= user != null ? user.getName() : "User" %></strong> — here are your recent orders.</p>
 
-<% if (!orderList.isEmpty()) {
-    for (Order order : orderList) {
-        String status = order.getStatus();
-        boolean cancelled = status != null && status.equalsIgnoreCase("CANCELLED");
-        boolean canCancel = !cancelled && status != null && (status.equalsIgnoreCase("PLACED") || status.equalsIgnoreCase("CONFIRMED"));
-%>
+        <% if (!orderList.isEmpty()) {
+            for (Order order : orderList) {
+                String status = order.getStatus();
+                boolean cancelled = status != null && status.equalsIgnoreCase("CANCELLED");
+                boolean canCancel = !cancelled && status != null &&
+                    (status.equalsIgnoreCase("PLACED") || status.equalsIgnoreCase("CONFIRMED"));
+        %>
 
-<div class="order-card">
-    <div class="order-top">
-        <div class="order-id">Order #<%= order.getOrderId() %></div>
-        <div class="status <%= cancelled ? "cancelled" : "" %>">
-            <%= status != null ? status : "PLACED" %>
-        </div>
-    </div>
+        <div class="order-card">
+            <div class="order-top">
+                <div class="order-id">Order #<%= order.getOrderId() %></div>
+                <div class="status <%= cancelled ? "cancelled" : "" %>">
+                    <%= status != null ? status : "PLACED" %>
+                </div>
+            </div>
 
-    <div class="order-details">
-        <div>
-            <div class="detail-label">Order Date</div>
-            <div class="detail-value"><%= order.getOrderDate() %></div>
-        </div>
-        <div>
-            <div class="detail-label">Restaurant</div>
-            <div class="detail-value">#<%= order.getRestaurantId() %></div>
-        </div>
-        <div>
-            <div class="detail-label">Payment</div>
-            <div class="detail-value"><%= order.getPaymentOption() %></div>
-        </div>
-        <div>
-            <div class="detail-label">Total Amount</div>
-            <div class="detail-value amount">&#8377;<%= String.format("%.2f", order.getTotalAmount()) %></div>
-        </div>
-    </div>
+            <div class="order-details">
+                <div>
+                    <div class="detail-label">Order Date</div>
+                    <div class="detail-value"><%= order.getOrderDate() %></div>
+                </div>
+                <div>
+                    <div class="detail-label">Restaurant</div>
+                    <div class="detail-value">#<%= order.getRestaurantId() %></div>
+                </div>
+                <div>
+                    <div class="detail-label">Payment</div>
+                    <div class="detail-value"><%= order.getPaymentOption() %></div>
+                </div>
+                <div>
+                    <div class="detail-label">Total Amount</div>
+                    <div class="detail-value amount">&#8377;<%= String.format("%.2f", order.getTotalAmount()) %></div>
+                </div>
+            </div>
 
-    <div class="order-actions">
-        <a href="order-details?orderId=<%= order.getOrderId() %>" class="action-btn view-btn">View Details</a>
-        <a href="track-order?orderId=<%= order.getOrderId() %>" class="action-btn view-btn" style="background:#24963f;">Track Order</a>
-        <% if (canCancel) { %>
-            <a href="cancel-order?orderId=<%= order.getOrderId() %>" class="action-btn cancel-btn" onclick="return confirm('Are you sure you want to cancel this order?');">Cancel Order</a>
+            <div class="order-actions">
+                <a href="order-details?orderId=<%= order.getOrderId() %>" class="action-btn view-btn">View Details</a>
+                <a href="track-order?orderId=<%= order.getOrderId() %>" class="action-btn view-btn" style="background:#24963f;">Track Order</a>
+                <% if (canCancel) { %>
+                    <a href="cancel-order?orderId=<%= order.getOrderId() %>" class="action-btn cancel-btn" onclick="return confirm('Are you sure you want to cancel this order?');">Cancel Order</a>
+                <% } %>
+            </div>
+        </div>
+
+        <% }
+        } else { %>
+
+        <div class="empty-card">
+            <div class="empty-icon">🍽️</div>
+            <h2>No Orders Yet</h2>
+            <p>Looks like you haven't ordered anything yet. Let's find something delicious!</p>
+            <a href="restaurants" class="btn">Browse Restaurants</a>
+        </div>
+
         <% } %>
-    </div>
-</div>
 
-<% }
-} else { %>
+    </main>
 
-<div class="empty-card">
-    <div class="empty-icon">🍽️</div>
-    <h2>No Orders Yet</h2>
-    <p>Looks like you haven't ordered anything yet. Let's find something delicious!</p>
-    <a href="restaurants" class="btn">Browse Restaurants</a>
-</div>
+    <%@ include file="ai-assistant.jsp" %>
 
-<% } %>
+    <footer>
+        <p>&copy; 2026 SmartBite Delivery Platform. All rights reserved.</p>
+    </footer>
 
-</div>
+    <script>
+    (function () {
+        const THEME_KEY = "smartbite_theme";
+        const BRIGHTNESS_KEY = "smartbite_brightness";
+        const MIN_BRIGHTNESS = 0.5;
+        const MAX_BRIGHTNESS = 1.5;
 
-<script>
-// Theme & Brightness Management
-(function() {
-    const savedTheme = localStorage.getItem("smartbite_theme");
-    if (savedTheme === "light") {
-        document.body.classList.add("light-mode");
-    }
-    updateThemeButtonUI();
-})();
+        const slider = document.getElementById("brightnessSlider");
+        const fill = document.getElementById("brightnessFill");
+        const thumb = document.getElementById("brightnessThumb");
+        const content = document.getElementById("smartbite-page-content");
 
-function toggleTheme() {
-    document.body.classList.toggle("light-mode");
-    const isLight = document.body.classList.contains("light-mode");
-    localStorage.setItem("smartbite_theme", isLight ? "light" : "dark");
-    updateThemeButtonUI();
-}
+        let brightness = 1;
+        let dragging = false;
 
-function updateThemeButtonUI() {
-    const isLight = document.body.classList.contains("light-mode");
-    const themeIcon = document.getElementById("themeIcon");
-    if (themeIcon) {
-        themeIcon.textContent = isLight ? "☀️" : "🌙";
-    }
-}
+        function clamp(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
 
-function adjustBrightness(val) {
-    document.documentElement.style.filter = "brightness(" + val + ")";
-    localStorage.setItem("smartbite_brightness", val);
-}
-</script>
+        function updateBrightnessUI() {
+            const percentage =
+                ((brightness - MIN_BRIGHTNESS) /
+                (MAX_BRIGHTNESS - MIN_BRIGHTNESS)) * 100;
 
-<%@ include file="ai-assistant.jsp" %>
+            if (fill) {
+                fill.style.width = percentage + "%";
+            }
 
-<footer>
-    <p>&copy; 2026 SmartBite Delivery Platform. All rights reserved.</p>
-</footer>
+            if (thumb) {
+                thumb.style.left = percentage + "%";
+            }
+
+            if (slider) {
+                slider.setAttribute("aria-valuenow", brightness.toFixed(2));
+            }
+
+            if (content) {
+                content.style.filter = "brightness(" + brightness + ")";
+            }
+        }
+
+        function setBrightness(value, save) {
+            const parsedValue = Number(value);
+
+            if (!Number.isFinite(parsedValue)) {
+                return;
+            }
+
+            brightness = clamp(parsedValue, MIN_BRIGHTNESS, MAX_BRIGHTNESS);
+            updateBrightnessUI();
+
+            if (save) {
+                try {
+                    localStorage.setItem(BRIGHTNESS_KEY, String(brightness));
+                } catch (error) {
+                    console.warn("Unable to save brightness preference.");
+                }
+            }
+        }
+
+        function setBrightnessFromPointer(event) {
+            if (!slider) {
+                return;
+            }
+
+            const rect = slider.getBoundingClientRect();
+
+            if (rect.width <= 0) {
+                return;
+            }
+
+            const percentage = clamp(
+                (event.clientX - rect.left) / rect.width,
+                0,
+                1
+            );
+
+            const value =
+                MIN_BRIGHTNESS +
+                percentage * (MAX_BRIGHTNESS - MIN_BRIGHTNESS);
+
+            setBrightness(value, true);
+        }
+
+        window.setThemeMode = function (mode) {
+            const isLight = mode === "light";
+
+            document.body.classList.toggle("light-mode", isLight);
+
+            try {
+                localStorage.setItem(THEME_KEY, isLight ? "light" : "dark");
+            } catch (error) {
+                console.warn("Unable to save theme preference.");
+            }
+
+            updateThemeButtonUI();
+        };
+
+        window.toggleTheme = function () {
+            const isLight = document.body.classList.contains("light-mode");
+            window.setThemeMode(isLight ? "dark" : "light");
+        };
+
+        function updateThemeButtonUI() {
+            const isLight = document.body.classList.contains("light-mode");
+            const lightButton = document.getElementById("lightModeBtn");
+            const darkButton = document.getElementById("darkModeBtn");
+
+            if (lightButton) {
+                lightButton.classList.toggle("active", isLight);
+                lightButton.setAttribute("aria-pressed", String(isLight));
+            }
+
+            if (darkButton) {
+                darkButton.classList.toggle("active", !isLight);
+                darkButton.setAttribute("aria-pressed", String(!isLight));
+            }
+        }
+
+        function handleBrightnessKeydown(event) {
+            let nextValue = brightness;
+
+            switch (event.key) {
+                case "ArrowLeft":
+                case "ArrowDown":
+                    nextValue -= 0.05;
+                    break;
+                case "ArrowRight":
+                case "ArrowUp":
+                    nextValue += 0.05;
+                    break;
+                case "Home":
+                    nextValue = MIN_BRIGHTNESS;
+                    break;
+                case "End":
+                    nextValue = MAX_BRIGHTNESS;
+                    break;
+                default:
+                    return;
+            }
+
+            event.preventDefault();
+            setBrightness(nextValue, true);
+        }
+
+        function loadPreferences() {
+            try {
+                const savedTheme = localStorage.getItem(THEME_KEY);
+
+                if (savedTheme === "light" || savedTheme === "dark") {
+                    document.body.classList.toggle(
+                        "light-mode",
+                        savedTheme === "light"
+                    );
+                }
+
+                const savedBrightness = localStorage.getItem(BRIGHTNESS_KEY);
+
+                if (savedBrightness !== null) {
+                    setBrightness(savedBrightness, false);
+                } else {
+                    setBrightness(1, false);
+                }
+            } catch (error) {
+                setBrightness(1, false);
+            }
+
+            updateThemeButtonUI();
+        }
+
+        if (slider) {
+            slider.addEventListener("pointerdown", function (event) {
+                dragging = true;
+
+                if (slider.setPointerCapture) {
+                    slider.setPointerCapture(event.pointerId);
+                }
+
+                setBrightnessFromPointer(event);
+            });
+
+            slider.addEventListener("pointermove", function (event) {
+                if (dragging) {
+                    setBrightnessFromPointer(event);
+                }
+            });
+
+            slider.addEventListener("pointerup", function () {
+                dragging = false;
+            });
+
+            slider.addEventListener("pointercancel", function () {
+                dragging = false;
+            });
+
+            slider.addEventListener("keydown", handleBrightnessKeydown);
+        }
+
+        window.addEventListener("storage", function (event) {
+            if (event.key === THEME_KEY) {
+                if (event.newValue === "light" || event.newValue === "dark") {
+                    document.body.classList.toggle(
+                        "light-mode",
+                        event.newValue === "light"
+                    );
+                    updateThemeButtonUI();
+                }
+            }
+
+            if (event.key === BRIGHTNESS_KEY && event.newValue !== null) {
+                setBrightness(event.newValue, false);
+            }
+        });
+
+        loadPreferences();
+    })();
+    </script>
 
 </body>
 </html>
