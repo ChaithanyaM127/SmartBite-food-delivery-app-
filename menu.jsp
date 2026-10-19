@@ -29,7 +29,7 @@
 :root {
     --bg-page: #0d0d0f;
     --bg-card-dark: #121318;
-    --bg-card-bottom: #1e1e24; 
+    --bg-card-bottom: #1e1e24;
     --text-main: #ffffff;
     --text-muted: #a1a1aa;
     --text-bottom-main: #f4f4f5;
@@ -101,6 +101,7 @@ body.light-mode {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
 }
 
 .logo {
@@ -109,6 +110,7 @@ body.light-mode {
     color: var(--text-main);
     text-decoration: none;
     letter-spacing: -0.5px;
+    flex-shrink: 0;
 }
 
 .logo span {
@@ -129,48 +131,130 @@ body.light-mode {
     display: flex;
     align-items: center;
     gap: 6px;
+    white-space: nowrap;
 }
 
-.nav-links a:hover, .nav-links a.active {
+.nav-links a:hover,
+.nav-links a.active {
     color: var(--accent);
 }
 
-.profile-avatar {
-    width: 36px;
-    height: 36px;
+/* Small profile avatar matching the other SmartBite pages */
+.nav-links > a.profile-avatar {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    padding: 0;
+    margin: 0;
     border-radius: 50%;
     background: var(--metric-bg);
     border: 1px solid var(--panel-border);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1;
     text-decoration: none;
+    flex-shrink: 0;
+    transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
+.nav-links > a.profile-avatar:hover {
+    transform: scale(1.06);
+    border-color: var(--accent);
+}
+
+/* Theme and brightness controls matching Cart and Orders */
 .controls-box {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 10px;
-    background: var(--metric-bg);
-    border: 1px solid var(--panel-border);
-    padding: 5px 12px;
-    border-radius: 30px;
+    justify-content: center;
+    gap: 8px;
+    padding: 0;
+    margin-left: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    flex-shrink: 0;
+}
+
+.theme-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .18s ease;
+}
+
+.theme-mode-btn:hover,
+.theme-mode-btn.active {
+    color: var(--accent);
 }
 
 .brightness-slider {
-    width: 60px;
-    height: 3px;
-    accent-color: var(--accent);
+    position: relative;
+    display: block;
+    flex: 0 0 54px;
+    width: 54px;
+    height: 12px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
     cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    outline-offset: 3px;
 }
 
-.theme-toggle-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    font-size: 15px;
-    color: var(--text-main);
+.brightness-track,
+.brightness-fill {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    height: 1px;
+    border-radius: 0;
+    transform: translateY(-50%);
+}
+
+.brightness-track {
+    width: 100%;
+    background: var(--text-muted);
+    opacity: .7;
+}
+
+.brightness-fill {
+    width: 50%;
+    background: var(--accent);
+}
+
+.brightness-thumb {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: none;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
 }
 
 /* Main Layout */
@@ -554,9 +638,55 @@ footer {
     font-size: 12px;
 }
 
-@media(max-width:1200px){ .g-card{ width: calc(33.333% - 8px); } }
-@media(max-width:900px){ .g-card{ width: calc(50% - 6px); } }
-@media(max-width:700px){ .g-card{ width: 100%; } }
+@media(max-width:1200px) {
+    .g-card { width: calc(33.333% - 8px); }
+}
+
+@media(max-width:900px) {
+    .g-card { width: calc(50% - 6px); }
+
+    .nav-container {
+        padding: 12px 18px;
+        flex-wrap: wrap;
+    }
+
+    .nav-links {
+        gap: 14px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+}
+
+@media(max-width:700px) {
+    .g-card { width: 100%; }
+
+    .nav-container {
+        padding: 12px 14px;
+    }
+
+    .logo {
+        font-size: 23px;
+    }
+
+    .nav-links {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 14px;
+    }
+
+    .nav-links a {
+        font-size: 12px;
+    }
+
+    .container {
+        padding: 0 14px;
+        margin-top: 22px;
+    }
+
+    .heading h1 {
+        font-size: 23px;
+    }
+}
 </style>
 
 </head>
@@ -567,39 +697,47 @@ footer {
     <header class="navbar">
         <div class="nav-container">
             <a href="home.jsp" class="logo">Smart<span>Bite</span></a>
+
             <nav class="nav-links">
                 <a href="home.jsp">Home</a>
                 <a href="restaurants">Restaurants</a>
                 <a href="orders.jsp" title="Orders">Orders</a>
-                <a href="cart.jsp" title="Cart">🛒 Cart <span id="fta-cart-badge" style="background:#e23744; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:10px; margin-left:4px;">0</span></a>
-                <a href="profile.jsp" class="profile-avatar" title="Profile">👤</a>
-                
-                <div class="controls-box">
-                    <input type="range" min="0.5" max="1.5" step="0.05" value="1" class="brightness-slider" id="brightnessSlider" oninput="adjustBrightness(this.value)" title="Adjust Brightness">
-                    <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
-                        <span id="themeIcon">🌙</span>
-                    </button>
+                <a href="cart.jsp" title="Cart">🛒 Cart <span id="fta-cart-badge" style="display:none; background:#e23744; color:#fff; font-size:10px; font-weight:800; padding:2px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+                <a href="profile.jsp" class="profile-avatar" title="Profile" aria-label="Profile">👤</a>
+
+                <div class="controls-box" aria-label="Theme and brightness controls">
+                    <button type="button" class="theme-mode-btn" id="lightModeBtn"
+                            onclick="setThemeMode('light')" title="Light Mode"
+                            aria-label="Switch to Light Mode" aria-pressed="false">☀</button>
+
+                    <div class="brightness-slider" id="brightnessSlider"
+                         role="slider" tabindex="0" aria-label="Adjust screen brightness"
+                         aria-valuemin="0.5" aria-valuemax="1.5" aria-valuenow="1"
+                         title="Drag to adjust brightness">
+                        <span class="brightness-track" aria-hidden="true"></span>
+                        <span class="brightness-fill" id="brightnessFill" aria-hidden="true"></span>
+                        <span class="brightness-thumb" id="brightnessThumb" aria-hidden="true"></span>
+                    </div>
+
+                    <button type="button" class="theme-mode-btn" id="darkModeBtn"
+                            onclick="setThemeMode('dark')" title="Dark Mode"
+                            aria-label="Switch to Dark Mode" aria-pressed="true">☾</button>
                 </div>
             </nav>
         </div>
     </header>
 
-<div class="container">
+<main class="container" id="smartbite-page-content">
 
-<div class="heading">
+    <div class="heading">
+        <a href="restaurants" class="back-link">← Back to Restaurants</a>
+        <h1>Delicious Menu</h1>
+        <p>Choose your favourite food and enjoy your meal.</p>
+    </div>
 
-<a href="restaurants" class="back-link">← Back to Restaurants</a>
-
-<h1>Delicious Menu</h1>
-
-<p>Choose your favourite food and enjoy your meal.</p>
-
-</div>
-
-<div class="menu-grid">
+    <div class="menu-grid">
 
 <%
-
 List<Menu> menuList = new ArrayList<>();
 
 Object menuObject = request.getAttribute("menuList");
@@ -695,66 +833,63 @@ if (!menuList.isEmpty()) {
         }
 %>
 
-<div class="g-card">
+        <div class="g-card">
 
-    <!-- TOP DEEP BLACK SECTION -->
-    <div class="card-part-top-black">
-        <div class="cimg">
-            <img src="<%= foodImage %>" alt="<%= foodName %>"
-                onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=90';">
-        </div>
-        
-        <div class="item-title-row">
-            <div class="ci" style="padding:0; background:transparent !important; border:none;">
-                <h2><%= foodName %></h2>
-            </div>
-        </div>
-    </div>
+            <div class="card-part-top-black">
+                <div class="cimg">
+                    <img src="<%= foodImage %>" alt="<%= foodName %>"
+                         onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=900&q=90';">
+                </div>
 
-    <!-- BOTTOM ADAPTIVE SECTION -->
-    <div class="ci">
-        <p class="description"><%= description %></p>
-
-        <div class="nutrition-box">
-            <div class="nutrition-title">Nutrition</div>
-            <div class="nutrition-grid">
-                <div class="nutrition-item">
-                    <span class="nutrition-value"><%= String.format("%.1f", protein) %> g</span>
-                    <span class="nutrition-label">Protein</span>
-                </div>
-                <div class="nutrition-item">
-                    <span class="nutrition-value"><%= String.format("%.1f", carbs) %> g</span>
-                    <span class="nutrition-label">Carbs</span>
-                </div>
-                <div class="nutrition-item">
-                    <span class="nutrition-value"><%= String.format("%.1f", calories) %> kcal</span>
-                    <span class="nutrition-label">Calories</span>
-                </div>
-                <div class="nutrition-item">
-                    <span class="nutrition-value"><%= String.format("%.1f", fiber) %> g</span>
-                    <span class="nutrition-label">Fiber</span>
+                <div class="item-title-row">
+                    <div class="ci" style="padding:0; background:transparent !important; border:none;">
+                        <h2><%= foodName %></h2>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div class="bottom">
-            <span class="price">&#8377;<%= menu.getPrice() %></span>
+            <div class="ci">
+                <p class="description"><%= description %></p>
 
-            <div class="cart-control" id="cart-control-<%= menu.getMenuId() %>">
-            <% if (quantity > 0) { %>
-                <div class="quantity-control">
-                    <button type="button" onclick="changeQuantity(<%= menu.getMenuId() %>, 'decrease')">&#8722;</button>
-                    <span class="quantity-number" id="quantity-<%= menu.getMenuId() %>"><%= quantity %></span>
-                    <button type="button" onclick="changeQuantity(<%= menu.getMenuId() %>, 'increase')">+</button>
+                <div class="nutrition-box">
+                    <div class="nutrition-title">Nutrition</div>
+                    <div class="nutrition-grid">
+                        <div class="nutrition-item">
+                            <span class="nutrition-value"><%= String.format("%.1f", protein) %> g</span>
+                            <span class="nutrition-label">Protein</span>
+                        </div>
+                        <div class="nutrition-item">
+                            <span class="nutrition-value"><%= String.format("%.1f", carbs) %> g</span>
+                            <span class="nutrition-label">Carbs</span>
+                        </div>
+                        <div class="nutrition-item">
+                            <span class="nutrition-value"><%= String.format("%.1f", calories) %> kcal</span>
+                            <span class="nutrition-label">Calories</span>
+                        </div>
+                        <div class="nutrition-item">
+                            <span class="nutrition-value"><%= String.format("%.1f", fiber) %> g</span>
+                            <span class="nutrition-label">Fiber</span>
+                        </div>
+                    </div>
                 </div>
-            <% } else { %>
-                <button type="button" class="add-button" onclick="addToCart(<%= menu.getMenuId() %>)">Add to Cart</button>
-            <% } %>
+
+                <div class="bottom">
+                    <span class="price">&#8377;<%= menu.getPrice() %></span>
+
+                    <div class="cart-control" id="cart-control-<%= menu.getMenuId() %>">
+                    <% if (quantity > 0) { %>
+                        <div class="quantity-control">
+                            <button type="button" onclick="changeQuantity(<%= menu.getMenuId() %>, 'decrease')">&#8722;</button>
+                            <span class="quantity-number" id="quantity-<%= menu.getMenuId() %>"><%= quantity %></span>
+                            <button type="button" onclick="changeQuantity(<%= menu.getMenuId() %>, 'increase')">+</button>
+                        </div>
+                    <% } else { %>
+                        <button type="button" class="add-button" onclick="addToCart(<%= menu.getMenuId() %>)">Add to Cart</button>
+                    <% } %>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-
-</div>
 
 <%
     }
@@ -762,18 +897,17 @@ if (!menuList.isEmpty()) {
 } else {
 %>
 
-<div class="empty">
-    <h2>No food available</h2>
-    <p>This restaurant doesn't have menu items yet.</p>
-</div>
+        <div class="empty">
+            <h2>No food available</h2>
+            <p>This restaurant doesn't have menu items yet.</p>
+        </div>
 
 <%
 }
 %>
 
-</div>
-
-</div>
+    </div>
+</main>
 
 <!-- CENTERED MULTI-RESTAURANT CONFIRMATION MODAL WITH 3 OPTIONS -->
 <div class="modal-overlay" id="restaurantMismatchModal">
@@ -789,6 +923,7 @@ if (!menuList.isEmpty()) {
 </div>
 
 <script>
+/* Cart information */
 var FTCART_INFO = {};
 <%
 if (!menuList.isEmpty()) {
@@ -796,23 +931,28 @@ if (!menuList.isEmpty()) {
         String n = menu.getName() == null ? "" : menu.getName().replace("\\", "").replace("'", "").replace("\"", "");
         String im = menu.getImagePath() == null ? "" : menu.getImagePath().replace("'", "").replace("\"", "");
 %>
-FTCART_INFO[<%= menu.getMenuId() %>] = { name: "<%= n %>", price: <%= menu.getPrice() %>, img: "<%= im %>" };
+FTCart_INFO[<%= menu.getMenuId() %>] = { name: "<%= n %>", price: <%= menu.getPrice() %>, img: "<%= im %>" };
 <%
     }
 }
 %>
 
 function updateBadgeCount(count) {
-    var b = document.getElementById('fta-cart-badge');
-    if (b) {
-        b.textContent = count;
-        localStorage.setItem("foodtap_cart_count", count);
-        localStorage.setItem("smartbite_cart_count", count);
+    var badge = document.getElementById('fta-cart-badge');
+    count = Math.max(0, parseInt(count, 10) || 0);
+
+    if (badge) {
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'inline-block' : 'none';
     }
+
+    localStorage.setItem("foodtap_cart_count", count);
+    localStorage.setItem("smartbite_cart_count", count);
 }
 
 function addToCart(menuId, mode = '') {
     var url = 'cart?menuId=' + menuId;
+
     if (mode) {
         url += '&mode=' + mode;
     }
@@ -820,9 +960,11 @@ function addToCart(menuId, mode = '') {
     fetch(url, { method: 'GET', credentials: 'same-origin' })
     .then(function(response) {
         var contentType = response.headers.get("content-type");
+
         if (contentType && contentType.includes("application/json")) {
             return response.json();
         }
+
         return { status: "success", cartCount: 0 };
     })
     .then(function(data) {
@@ -842,112 +984,268 @@ function addToCart(menuId, mode = '') {
             cancelNewBtn.parentNode.replaceChild(newCancelNewBtn, cancelNewBtn);
             cancelPrevBtn.parentNode.replaceChild(newCancelPrevBtn, cancelPrevBtn);
 
-            // 1. Yes, continue adding items from different restaurants
             newYesBtn.addEventListener("click", function() {
                 modal.style.display = "none";
                 addToCart(menuId, 'continue');
             });
 
-            // 2. No, cancel this item which I am adding now
             newCancelNewBtn.addEventListener("click", function() {
                 modal.style.display = "none";
                 addToCart(menuId, 'cancelNew');
             });
 
-            // 3. No, cancel the previous item which I have added to the cart
             newCancelPrevBtn.addEventListener("click", function() {
                 modal.style.display = "none";
                 addToCart(menuId, 'cancelPrev');
             });
+
         } else if (data.status === "cancelledNew") {
-            // Do nothing, item not added
+            // Item was cancelled and was not added.
         } else {
             showQuantityControl(menuId, 1);
+
             if (typeof data.cartCount !== 'undefined') {
                 updateBadgeCount(data.cartCount);
             }
         }
     })
-    .catch(function(error) { console.error(error); });
+    .catch(function(error) {
+        console.error(error);
+    });
 }
 
 function changeQuantity(menuId, action) {
-    fetch('cart?action=' + action + '&menuId=' + menuId, { method: 'GET', credentials: 'same-origin' })
+    fetch('cart?action=' + action + '&menuId=' + menuId, {
+        method: 'GET',
+        credentials: 'same-origin'
+    })
     .then(function(response) {
         var contentType = response.headers.get("content-type");
+
         if (contentType && contentType.includes("application/json")) {
             return response.json();
         }
+
         return { status: "success", cartCount: 0 };
     })
     .then(function(data) {
-        var q = document.getElementById('quantity-' + menuId);
-        if (q) {
-            var n = parseInt(q.textContent.trim(), 10);
+        var quantityElement = document.getElementById('quantity-' + menuId);
+
+        if (quantityElement) {
+            var quantity = parseInt(quantityElement.textContent.trim(), 10);
+
             if (action === 'increase') {
-                n++;
-                q.textContent = n;
+                quantity++;
+                quantityElement.textContent = quantity;
             } else {
-                n--;
-                if (n <= 0) {
+                quantity--;
+
+                if (quantity <= 0) {
                     showAddButton(menuId);
                 } else {
-                    q.textContent = n;
+                    quantityElement.textContent = quantity;
                 }
             }
         }
+
         if (typeof data.cartCount !== 'undefined') {
             updateBadgeCount(data.cartCount);
         }
     })
-    .catch(function(error) { console.error(error); });
+    .catch(function(error) {
+        console.error(error);
+    });
 }
 
 function showQuantityControl(menuId, quantity) {
-    var c = document.getElementById('cart-control-' + menuId);
-    c.innerHTML = '<div class="quantity-control">'
-        + '<button type="button" onclick="changeQuantity(' + menuId + ', \'decrease\')">&#8722;</button>'
-        + '<span class="quantity-number" id="quantity-' + menuId + '">' + quantity + '</span>'
-        + '<button type="button" onclick="changeQuantity(' + menuId + ', \'increase\')">+</button>'
-        + '</div>';
+    var control = document.getElementById('cart-control-' + menuId);
+
+    if (!control) return;
+
+    control.innerHTML =
+        '<div class="quantity-control">' +
+            '<button type="button" onclick="changeQuantity(' + menuId + ', \'decrease\')">&#8722;</button>' +
+            '<span class="quantity-number" id="quantity-' + menuId + '">' + quantity + '</span>' +
+            '<button type="button" onclick="changeQuantity(' + menuId + ', \'increase\')">+</button>' +
+        '</div>';
 }
 
 function showAddButton(menuId) {
-    var c = document.getElementById('cart-control-' + menuId);
-    c.innerHTML = '<button type="button" class="add-button" onclick="addToCart(' + menuId + ')">Add to Cart</button>';
+    var control = document.getElementById('cart-control-' + menuId);
+
+    if (!control) return;
+
+    control.innerHTML =
+        '<button type="button" class="add-button" onclick="addToCart(' + menuId + ')">Add to Cart</button>';
 }
 
-// Theme & Brightness Management
+/* Theme and brightness settings */
 (function() {
-    const savedTheme = localStorage.getItem("smartbite_theme");
+    var savedTheme = localStorage.getItem("smartbite_theme");
+    var savedBrightness = parseFloat(localStorage.getItem("smartbite_brightness"));
+
     if (savedTheme === "light") {
         document.body.classList.add("light-mode");
+    } else {
+        document.body.classList.remove("light-mode");
     }
+
+    if (!Number.isFinite(savedBrightness)) {
+        savedBrightness = 1;
+    }
+
+    savedBrightness = Math.max(0.5, Math.min(1.5, savedBrightness));
+
+    applyBrightness(savedBrightness);
     updateThemeButtonUI();
 
-    // Set initial badge count from server JSP render
     updateBadgeCount(<%= initialCartCount %>);
 })();
 
-function toggleTheme() {
-    document.body.classList.toggle("light-mode");
-    const isLight = document.body.classList.contains("light-mode");
+function setThemeMode(mode) {
+    var isLight = mode === "light";
+
+    document.body.classList.toggle("light-mode", isLight);
     localStorage.setItem("smartbite_theme", isLight ? "light" : "dark");
+
     updateThemeButtonUI();
 }
 
+function toggleTheme() {
+    var isLight = !document.body.classList.contains("light-mode");
+    setThemeMode(isLight ? "light" : "dark");
+}
+
 function updateThemeButtonUI() {
-    const isLight = document.body.classList.contains("light-mode");
-    const themeIcon = document.getElementById("themeIcon");
-    if (themeIcon) {
-        themeIcon.textContent = isLight ? "☀️" : "🌙";
+    var isLight = document.body.classList.contains("light-mode");
+    var lightButton = document.getElementById("lightModeBtn");
+    var darkButton = document.getElementById("darkModeBtn");
+
+    if (lightButton) {
+        lightButton.classList.toggle("active", isLight);
+        lightButton.setAttribute("aria-pressed", String(isLight));
+    }
+
+    if (darkButton) {
+        darkButton.classList.toggle("active", !isLight);
+        darkButton.setAttribute("aria-pressed", String(!isLight));
     }
 }
 
-function adjustBrightness(val) {
-    document.documentElement.style.filter = "brightness(" + val + ")";
-    localStorage.setItem("smartbite_brightness", val);
+function applyBrightness(value) {
+    var brightness = Math.max(0.5, Math.min(1.5, Number(value) || 1));
+    var content = document.getElementById("smartbite-page-content");
+    var slider = document.getElementById("brightnessSlider");
+    var fill = document.getElementById("brightnessFill");
+    var thumb = document.getElementById("brightnessThumb");
+
+    if (content) {
+        content.style.filter = "brightness(" + brightness + ")";
+    }
+
+    var percentage = ((brightness - 0.5) / 1.0) * 100;
+
+    if (fill) {
+        fill.style.width = percentage + "%";
+    }
+
+    if (thumb) {
+        thumb.style.left = percentage + "%";
+    }
+
+    if (slider) {
+        slider.setAttribute("aria-valuenow", brightness.toFixed(2));
+    }
+
+    localStorage.setItem("smartbite_brightness", String(brightness));
 }
+
+function setBrightnessFromPointer(event) {
+    var slider = document.getElementById("brightnessSlider");
+    if (!slider) return;
+
+    var rect = slider.getBoundingClientRect();
+    if (rect.width <= 0) return;
+
+    var percentage = (event.clientX - rect.left) / rect.width;
+    percentage = Math.max(0, Math.min(1, percentage));
+
+    var brightness = 0.5 + percentage;
+    applyBrightness(brightness);
+}
+
+(function() {
+    var slider = document.getElementById("brightnessSlider");
+    if (!slider) return;
+
+    var dragging = false;
+
+    slider.addEventListener("pointerdown", function(event) {
+        dragging = true;
+
+        if (slider.setPointerCapture) {
+            slider.setPointerCapture(event.pointerId);
+        }
+
+        setBrightnessFromPointer(event);
+        event.preventDefault();
+    });
+
+    slider.addEventListener("pointermove", function(event) {
+        if (dragging) {
+            setBrightnessFromPointer(event);
+        }
+    });
+
+    slider.addEventListener("pointerup", function() {
+        dragging = false;
+    });
+
+    slider.addEventListener("pointercancel", function() {
+        dragging = false;
+    });
+
+    slider.addEventListener("keydown", function(event) {
+        var current = parseFloat(localStorage.getItem("smartbite_brightness")) || 1;
+        var step = 0.05;
+
+        if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+            current += step;
+        } else if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+            current -= step;
+        } else if (event.key === "Home") {
+            current = 0.5;
+        } else if (event.key === "End") {
+            current = 1.5;
+        } else {
+            return;
+        }
+
+        event.preventDefault();
+        applyBrightness(current);
+    });
+})();
+
+window.addEventListener("storage", function(event) {
+    if (event.key === "smartbite_theme") {
+        if (event.newValue === "light") {
+            document.body.classList.add("light-mode");
+        } else {
+            document.body.classList.remove("light-mode");
+        }
+
+        updateThemeButtonUI();
+    }
+
+    if (event.key === "smartbite_brightness") {
+        applyBrightness(parseFloat(event.newValue) || 1);
+    }
+
+    if (event.key === "smartbite_cart_count" || event.key === "foodtap_cart_count") {
+        var count = parseInt(event.newValue, 10);
+        updateBadgeCount(Number.isFinite(count) ? count : 0);
+    }
+});
 </script>
 
 <%@ include file="ai-assistant.jsp" %>
