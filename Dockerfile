@@ -1,4 +1,3 @@
-
 FROM tomcat:10.1-jdk21-temurin
 
 RUN apt-get update \
@@ -34,6 +33,13 @@ RUN printf '%s\n' \
     '    </welcome-file-list>' \
     '</web-app>' \
     > /usr/local/tomcat/webapps/ROOT/WEB-INF/web.xml
+
+# Disable Tomcat's shutdown port.
+# Render should communicate with the HTTP connector only.
+RUN sed -i 's/port="8005"/port="-1"/' /usr/local/tomcat/conf/server.xml
+
+# Make sure Tomcat's HTTP connector listens on port 8080.
+RUN sed -i 's/port="8080"/port="8080"/' /usr/local/tomcat/conf/server.xml
 
 EXPOSE 8080
 
