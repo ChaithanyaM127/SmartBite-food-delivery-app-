@@ -2310,7 +2310,7 @@ body.light-mode .birthday-surprise-actions button.secondary .birthday-copy-icon:
 
 <section class="hero-section">
     <div class="hero-content">
-        <div class="hero-eyebrow">✦ Eat Smater, Live Better.</div>
+        <div class="hero-eyebrow">✦ Eat Smarter, Live Better.</div>
 
         <h1>
             Discover the best food
