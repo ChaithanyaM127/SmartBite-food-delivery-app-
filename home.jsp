@@ -2310,7 +2310,7 @@ body.light-mode .birthday-surprise-actions button.secondary .birthday-copy-icon:
 
 <section class="hero-section">
     <div class="hero-content">
-        <div class="hero-eyebrow">✦ GOOD FOOD. SMARTER CHOICES.</div>
+        <div class="hero-eyebrow">✦ Eat Smater, Live Better.</div>
 
         <h1>
             Discover the best food
@@ -3458,7 +3458,6 @@ function handleBrightnessKeydown(event) {
     window.addEventListener("focus", refreshSmartBiteCartCount);
     document.addEventListener("visibilitychange", refreshSmartBiteCartCount);
     refreshSmartBiteCartCount();
-    window.setInterval(refreshSmartBiteCartCount, 2500);
 })();
 </script>
 </body>
