@@ -148,101 +148,173 @@
      * Current qualifying status: PLACED.
      */
 
-    int currentOrderStreak = 0;
-    int nextStreakMilestone = 0;
-    int[] streakMilestones = {1, 2, 3, 4, 5, 6, 7};
+int currentOrderStreak = 0;
+int nextStreakMilestone = 0;
+int[] streakMilestones = {3, 4, 5, 6, 7};
 
-    if (loggedInUser != null && loggedInUser.getUserId() > 0) {
-        List<LocalDate> orderDays = new ArrayList<>();
+if (loggedInUser != null && loggedInUser.getUserId() > 0) {
 
-        String streakSQL =
-            "SELECT DISTINCT DATE(orderDate) AS order_day " +
-            "FROM orders " +
-            "WHERE userId = ? " +
-            "AND status = 'PLACED' " +
-            "AND orderDate IS NOT NULL " +
-            "ORDER BY order_day DESC";
+    List<LocalDate> orderDays = new ArrayList<>();
 
-        Connection streakCon = null;
-        try {
-            streakCon = DBConnection.getConnection();
+    String streakSQL =
+        "SELECT orderDate " +
+        "FROM orders " +
+        "WHERE userId = ? " +
+        "AND status = 'PLACED' " +
+        "AND orderDate IS NOT NULL " +
+        "ORDER BY orderDate DESC";
 
-            if (streakCon == null) {
-                application.log("Unable to calculate SmartBite order streak: database connection is unavailable.");
-            } else {
-                try (PreparedStatement streakPS = streakCon.prepareStatement(streakSQL)) {
-                    streakPS.setInt(1, loggedInUser.getUserId());
+    Connection streakCon = null;
 
-                    try (ResultSet streakRS = streakPS.executeQuery()) {
-                        while (streakRS.next()) {
-                            java.sql.Date orderDate = streakRS.getDate("order_day");
+    try {
 
-                            if (orderDate != null) {
-                                LocalDate orderDay = orderDate.toLocalDate();
-                                if (!orderDay.isAfter(today)) {
-                                    orderDays.add(orderDay);
-                                }
+        streakCon = DBConnection.getConnection();
+
+        if (streakCon != null && !streakCon.isClosed()) {
+
+            try (PreparedStatement streakPS =
+                    streakCon.prepareStatement(streakSQL)) {
+
+                streakPS.setInt(1, loggedInUser.getUserId());
+
+                try (ResultSet streakRS = streakPS.executeQuery()) {
+
+                    while (streakRS.next()) {
+
+                        java.sql.Timestamp orderTimestamp =
+                            streakRS.getTimestamp("orderDate");
+
+                        if (orderTimestamp != null) {
+
+                            LocalDate orderDay =
+                                orderTimestamp.toInstant()
+                                    .atZone(indiaZone)
+                                    .toLocalDate();
+
+                            if (!orderDay.isAfter(today)
+                                    && !orderDays.contains(orderDay)) {
+
+                                orderDays.add(orderDay);
                             }
                         }
                     }
                 }
             }
 
-            if (!orderDays.isEmpty()) {
-                LocalDate latestOrderDay = orderDays.get(0);
+        } else {
 
-                if (!latestOrderDay.isBefore(today.minusDays(1))) {
-                    currentOrderStreak = 1;
-                    LocalDate previousDay = latestOrderDay;
+            application.log(
+                "Unable to calculate SmartBite order streak: database connection is unavailable."
+            );
+        }
 
-                    for (int i = 1; i < orderDays.size(); i++) {
-                        LocalDate orderDay = orderDays.get(i);
+        /*
+         * Calculate consecutive days.
+         */
+        if (!orderDays.isEmpty()) {
 
-                        if (previousDay.minusDays(1).equals(orderDay)) {
-                            currentOrderStreak++;
-                            previousDay = orderDay;
-                        } else {
-                            break;
-                        }
+            LocalDate latestOrderDay = orderDays.get(0);
+
+            /*
+             * Streak is active only if the latest order
+             * was placed today or yesterday.
+             */
+            if (!latestOrderDay.isBefore(today.minusDays(1))
+                    && !latestOrderDay.isAfter(today)) {
+
+                currentOrderStreak = 1;
+
+                LocalDate previousDay = latestOrderDay;
+
+                for (int i = 1; i < orderDays.size(); i++) {
+
+                    LocalDate orderDay = orderDays.get(i);
+
+                    if (previousDay.minusDays(1).equals(orderDay)) {
+
+                        currentOrderStreak++;
+                        previousDay = orderDay;
+
+                    } else {
+
+                        break;
                     }
                 }
             }
+        }
 
-        } catch (Exception e) {
-            application.log("Unable to calculate SmartBite order streak.", e);
-        } finally {
-            if (streakCon != null) {
-                try {
-                    streakCon.close();
-                } catch (Exception closeException) {
-                    application.log("Unable to close SmartBite streak database connection.", closeException);
-                }
+    } catch (Exception e) {
+
+        application.log(
+            "Unable to calculate SmartBite order streak.",
+            e
+        );
+
+    } finally {
+
+        if (streakCon != null) {
+
+            try {
+                streakCon.close();
+            } catch (Exception closeException) {
+
+                application.log(
+                    "Unable to close SmartBite streak database connection.",
+                    closeException
+                );
             }
         }
     }
+}
 
-    for (int milestone : streakMilestones) {
-        if (currentOrderStreak < milestone) {
-            nextStreakMilestone = milestone;
-            break;
-        }
+
+/*
+ * SNAPCHAT-STYLE SMARTBITE STREAK REWARDS
+ *
+ * Days 1 and 2 build the streak only.
+ * Rewards begin at Day 3.
+ */
+int firstRewardDay = 3;
+
+for (int milestone : streakMilestones) {
+
+    if (currentOrderStreak < milestone) {
+
+        nextStreakMilestone = milestone;
+        break;
     }
+}
 
-    boolean sevenDayMilestoneReached = currentOrderStreak >= 7;
+boolean sevenDayMilestoneReached = currentOrderStreak >= 7;
 
-    String[] streakRewardNames = {
-        "5% OFF", "10% OFF", "15% OFF", "20% OFF",
-        "25% OFF", "30% OFF", "40% OFF"
-    };
-    String[] streakCouponCodes = {
-        "BITE5", "BITE10", "BITE15", "SMART20",
-        "SMART25", "SMART30", "SMART40"
-    };
-    int[] streakRewardDays = {1, 2, 3, 4, 5, 6, 7};
-    int activeRewardIndex = -1;
-    if (loggedInUser != null && currentOrderStreak >= 1) {
-        activeRewardIndex = Math.min(currentOrderStreak, 7) - 1;
-    }
+String[] streakRewardNames = {
+    "15% OFF",
+    "20% OFF",
+    "25% OFF",
+    "30% OFF",
+    "40% OFF"
+};
+
+String[] streakCouponCodes = {
+    "BITE15",
+    "SMART20",
+    "SMART25",
+    "SMART30",
+    "SMART40"
+};
+
+int[] streakRewardDays = {
+    3, 4, 5, 6, 7
+};
+
+int activeRewardIndex = -1;
+
+if (loggedInUser != null
+        && currentOrderStreak >= firstRewardDay) {
+
+    activeRewardIndex =
+        Math.min(currentOrderStreak, 7) - 3;
+}
 
     /*
      * The current restaurant schema does not contain individual
@@ -2323,72 +2395,68 @@ body.light-mode .birthday-surprise-actions button.secondary .birthday-copy-icon:
             something delicious for every craving.
         </p>
 
-        <!-- YOUR STREAKS: compact hero card with visible earned-coupon copy action -->
-        <div class="hero-streak-card" role="group" aria-label="Your Streaks and coupon rewards">
-            <div class="hero-streak-top">
-                <span class="hero-streak-flame" aria-hidden="true">🔥</span>
-                <span class="hero-streak-summary">
-                    <span class="hero-streak-label">Your Streaks</span>
-                    <span class="hero-streak-title">
-                        <% if (loggedInUser == null) { %>
-                            Start your SmartBite streak
-                        <% } else { %>
-                            <%= currentOrderStreak %> <%= currentOrderStreak == 1 ? "Day" : "Days" %> in a row
-                        <% } %>
-                    </span>
-                    <span class="hero-streak-subtitle">
-                        <% if (loggedInUser == null) { %>
-                            Sign in to track your order streak and unlock rewards.
-                        <% } else if (currentOrderStreak == 0) { %>
-                            Place your first order to begin your streak and unlock Day 1.
-                        <% } else { %>
-                            Keep ordering on consecutive days to unlock your next reward.
-                        <% } %>
-                    </span>
-                </span>
-            </div>
+<!-- YOUR STREAKS: compact hero card with visible earned-coupon copy action -->
+<div class="hero-streak-card" role="group" aria-label="Your Streaks and coupon rewards">
 
-            <div class="hero-streak-days" aria-label="Seven-day order streak progress">
-                <% for (int streakDay = 1; streakDay <= 7; streakDay++) {
-                       boolean streakDayCompleted = loggedInUser != null && currentOrderStreak >= streakDay;
-                       boolean streakDayMilestone = streakDay >= 1;
-                %>
-                    <div class="hero-streak-day">
-                        <span class="hero-streak-day-mark <%= streakDayCompleted ? "completed" : (streakDayMilestone ? "milestone" : "") %>" aria-label="Day <%= streakDay %><%= streakDayCompleted ? ", completed" : ", not completed" %>">🔥</span>
-                        <span class="hero-streak-day-label">Day <%= streakDay %></span>
-                    </div>
-                <% } %>
-            </div>
-
-            <div class="hero-streak-reward">
-                <span class="hero-streak-reward-icon" aria-hidden="true">🎁</span>
-                <span class="hero-streak-reward-copy">
-                    <% if (loggedInUser == null) { %>
-                        <strong>Rewards await.</strong> Sign in to view your streak rewards.
-                    <% } else if (currentOrderStreak >= 1 && activeRewardIndex >= 0) { %>
-                        <strong>Day <%= streakRewardDays[activeRewardIndex] %> reward unlocked!</strong>
-                        <%= streakRewardNames[activeRewardIndex] %>
-                        <span class="hero-streak-coupon-code"><%= streakCouponCodes[activeRewardIndex] %></span>
-                    <% } else { %>
-                        <strong>Start your streak today.</strong>
-                        Place your first order to unlock Day 1: 5% OFF · BITE5.
-                    <% } %>
-                </span>
-                <% if (loggedInUser != null && currentOrderStreak >= 1 && activeRewardIndex >= 0) { %>
-                    <button type="button" class="hero-streak-copy-button"
-                            data-coupon="<%= streakCouponCodes[activeRewardIndex] %>"
-                            aria-label="Copy earned coupon <%= streakCouponCodes[activeRewardIndex] %>"
-                            onclick="copyStreakCoupon(this)">▢ COPY COUPON</button>
-                <% } else { %>
-                    <button type="button" class="hero-streak-copy-button" disabled
-                            aria-label="Copy coupon after a reward is unlocked"
-                            title="Place an order to unlock a coupon">▢ COPY COUPON</button>
-                <% } %>
-                <button type="button" class="hero-streak-reward-link"
-                        aria-controls="smartbite-rewards"
-                        onclick="setRewardsVisibility(true, true)">View rewards →</button>
-            </div>
+    <% if (loggedInUser == null) { %>
+        <div class="hero-streak-reward" style="margin-top:0; margin-bottom:12px;">
+            <span class="hero-streak-reward-icon" aria-hidden="true">🎁</span>
+            <span class="hero-streak-reward-copy">
+                <strong>Rewards await.</strong> Sign in to view your streak rewards.
+            </span>
         </div>
+    <% } %>
+
+    <div class="hero-streak-top">
+        <span class="hero-streak-flame" aria-hidden="true">🔥</span>
+        <span class="hero-streak-summary">
+            <span class="hero-streak-label">Your Streaks</span>
+            <span class="hero-streak-title">
+                <% if (loggedInUser == null) { %>
+                    Start your SmartBite streak
+                <% } else { %>
+                    <%= currentOrderStreak %> <%= currentOrderStreak == 1 ? "Day" : "Days" %> in a row
+                <% } %>
+            </span>
+            <span class="hero-streak-subtitle">
+                <% if (loggedInUser == null) { %>
+                    Sign in to track your order streak and unlock rewards.
+                <% } else if (currentOrderStreak == 0) { %>
+                    Place your first order to begin your streak and unlock Day 1.
+                <% } else { %>
+                    Keep ordering on consecutive days to unlock your next reward.
+                <% } %>
+            </span>
+        </span>
+    </div>
+
+    <div class="hero-streak-days" aria-label="Seven-day order streak progress">
+        <% for (int streakDay = 1; streakDay <= 7; streakDay++) {
+               boolean streakDayCompleted = loggedInUser != null && currentOrderStreak >= streakDay;
+               boolean streakDayMilestone = streakDay >= 1;
+        %>
+            <div class="hero-streak-day">
+                <span class="hero-streak-day-mark <%= streakDayCompleted ? "completed" : (streakDayMilestone ? "milestone" : "") %>" aria-label="Day <%= streakDay %><%= streakDayCompleted ? ", completed" : ", not completed" %>">🔥</span>
+                <span class="hero-streak-day-label">Day <%= streakDay %></span>
+            </div>
+        <% } %>
+    </div>
+
+    <% if (loggedInUser != null && currentOrderStreak >= firstRewardDay && activeRewardIndex >= 0) { %>
+        <div class="hero-streak-reward">
+            <span class="hero-streak-reward-icon" aria-hidden="true">🎉</span>
+            <span class="hero-streak-reward-copy">
+                <strong>Your reward unlocked!</strong>
+            </span>
+
+            <button type="button" class="hero-streak-copy-button"
+                    data-coupon="<%= streakCouponCodes[activeRewardIndex] %>"
+                    aria-label="Copy earned coupon <%= streakCouponCodes[activeRewardIndex] %>"
+                    onclick="copyStreakCoupon(this)">▢ COPY COUPON</button>
+        </div>
+    <% } %>
+
+</div>
 
         <div class="hero-buttons">
             <a href="restaurants" class="btn-primary">
@@ -2694,131 +2762,211 @@ body.light-mode .birthday-surprise-actions button.secondary .birthday-copy-icon:
         </div>
     </section>
 
-    <!-- RESTAURANT LISTINGS -->
+<!-- RESTAURANT LISTINGS -->
 
-    <section id="trending-restaurants">
-        <div class="section-header">
-            <h2>Trending Restaurants</h2>
-            <a href="restaurants">See all restaurants →</a>
-        </div>
+<section id="trending-restaurants">
+    <div class="section-header">
+        <h2>Trending Restaurants</h2>
+        <a href="restaurants">See all restaurants →</a>
+    </div>
 
-        <div class="restaurant-grid-wrapper">
-            <%
-                Connection con = null;
-                PreparedStatement ps = null;
-                ResultSet rs = null;
-                boolean foundRestaurants = false;
+    <div class="restaurant-grid-wrapper">
+        <%
+            Connection restaurantCon = null;
+            PreparedStatement restaurantPs = null;
+            ResultSet restaurantRs = null;
+            boolean foundRestaurants = false;
 
-                try {
-                    con = DBConnection.getConnection();
+            try {
 
-                    String sql =
-                        "SELECT restaurantId, name, cuisineType, deliveryTime, rating, imagePath " +
-                        "FROM restaurant ORDER BY restaurantId";
+                String dbUrl = System.getenv("DB_URL");
+                String dbUser = System.getenv("DB_USER");
+                String dbPassword = System.getenv("DB_PASSWORD");
 
-                    ps = con.prepareStatement(sql);
-                    rs = ps.executeQuery();
+                if (dbUrl != null && !dbUrl.trim().isEmpty()
+                        && dbUser != null && !dbUser.trim().isEmpty()) {
 
-                    while (rs.next()) {
-                        foundRestaurants = true;
+                    Class.forName("com.mysql.cj.jdbc.Driver");
 
-                        int restaurantId = rs.getInt("restaurantId");
-                        String name = rs.getString("name");
-                        String cuisine = rs.getString("cuisineType");
-                        String image = rs.getString("imagePath");
-                        int delivery = rs.getInt("deliveryTime");
-                        double rating = rs.getDouble("rating");
+                    restaurantCon = java.sql.DriverManager.getConnection(
+                        dbUrl,
+                        dbUser,
+                        dbPassword == null ? "" : dbPassword
+                    );
 
-                        if (name == null) name = "Restaurant";
-                        if (cuisine == null) cuisine = "Local favourites";
+                } else {
 
-                        if (image == null || image.trim().isEmpty()) {
-                            image = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80";
-                        }
-
-                        String safeName = name.replace("&", "&amp;")
-                            .replace("<", "&lt;")
-                            .replace(">", "&gt;")
-                            .replace("\"", "&quot;")
-                            .replace("'", "&#39;");
-
-                        String safeCuisine = cuisine.replace("&", "&amp;")
-                            .replace("<", "&lt;")
-                            .replace(">", "&gt;")
-                            .replace("\"", "&quot;")
-                            .replace("'", "&#39;");
-
-                        String safeImage = image.replace("&", "&amp;")
-                            .replace("\"", "&quot;")
-                            .replace("<", "&lt;")
-                            .replace(">", "&gt;");
-            %>
-
-            <form action="menu" method="get" class="restaurant-square-card">
-                <input type="hidden" name="restaurantId"
-                       value="<%= restaurantId %>">
-
-                <button type="submit"
-                        style="border:0;padding:0;margin:0;text-align:left;background:transparent;color:inherit;display:flex;flex-direction:column;width:100%;height:100%;cursor:pointer;">
-
-                    <div class="card-part-top-black">
-                        <div class="card-img-box">
-                            <img src="<%= safeImage %>"
-                                 alt="<%= safeName %>">
-
-                            <% if (isRestaurantOpen) { %>
-                                <span class="status-badge open">OPEN</span>
-                            <% } else { %>
-                                <span class="status-badge closed">CLOSED</span>
-                            <% } %>
-
-                            <span class="rating-badge">
-                                ★ <%= String.format(java.util.Locale.US, "%.1f", rating) %>
-                            </span>
-                        </div>
-
-                        <div class="restaurant-title-row">
-                            <div class="restaurant-title"><%= safeName %></div>
-                        </div>
-                    </div>
-
-                    <div class="card-part-bottom-charcoal">
-                        <div class="cuisine-text"><%= safeCuisine %></div>
-                        <div class="timing-text">🕒 10:00 AM - 11:00 PM</div>
-
-                        <div class="meta-footer-row">
-                            <span class="delivery-time">◷ <%= delivery %> mins</span>
-                            <span class="view-menu-btn-red">View Menu →</span>
-                        </div>
-                    </div>
-                </button>
-            </form>
-
-            <%
-                    }
-
-                    if (!foundRestaurants) {
-            %>
-                <p style="padding:16px;color:var(--text-muted);">
-                    No restaurants are available right now.
-                </p>
-            <%
-                    }
-                } catch (Exception e) {
-                    application.log("Error loading restaurants", e);
-            %>
-                <p style="padding:16px;color:var(--text-muted);">
-                    Restaurants are temporarily unavailable. Please try again.
-                </p>
-            <%
-                } finally {
-                    if (rs != null) try { rs.close(); } catch (Exception e) {}
-                    if (ps != null) try { ps.close(); } catch (Exception e) {}
-                    if (con != null) try { con.close(); } catch (Exception e) {}
+                    restaurantCon = DBConnection.getConnection();
                 }
-            %>
-        </div>
-    </section>
+
+                if (restaurantCon == null || restaurantCon.isClosed()) {
+                    throw new java.sql.SQLException(
+                        "SmartBite restaurant database connection is unavailable."
+                    );
+                }
+
+                String restaurantSql =
+                    "SELECT restaurantId, name, cuisineType, deliveryTime, rating, imagePath " +
+                    "FROM restaurant " +
+                    "ORDER BY restaurantId ASC";
+
+                restaurantPs = restaurantCon.prepareStatement(restaurantSql);
+                restaurantRs = restaurantPs.executeQuery();
+
+                while (restaurantRs.next()) {
+
+                    foundRestaurants = true;
+
+                    int restaurantId = restaurantRs.getInt("restaurantId");
+                    String name = restaurantRs.getString("name");
+                    String cuisine = restaurantRs.getString("cuisineType");
+                    String image = restaurantRs.getString("imagePath");
+                    int delivery = restaurantRs.getInt("deliveryTime");
+                    double rating = restaurantRs.getDouble("rating");
+
+                    if (name == null || name.trim().isEmpty()) {
+                        name = "Restaurant";
+                    }
+
+                    if (cuisine == null || cuisine.trim().isEmpty()) {
+                        cuisine = "Local favourites";
+                    }
+
+                    if (image == null || image.trim().isEmpty()) {
+                        image = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80";
+                    }
+
+                    String safeName = name.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                        .replace("\"", "&quot;")
+                        .replace("'", "&#39;");
+
+                    String safeCuisine = cuisine.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                        .replace("\"", "&quot;")
+                        .replace("'", "&#39;");
+
+                    String safeImage = image.replace("&", "&amp;")
+                        .replace("\"", "&quot;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;");
+        %>
+
+        <form action="menu" method="get" class="restaurant-square-card">
+
+            <input type="hidden"
+                   name="restaurantId"
+                   value="<%= restaurantId %>">
+
+            <button type="submit"
+                    style="border:0;padding:0;margin:0;text-align:left;background:transparent;color:inherit;display:flex;flex-direction:column;width:100%;height:100%;cursor:pointer;">
+
+                <div class="card-part-top-black">
+
+                    <div class="card-img-box">
+
+                        <img src="<%= safeImage %>"
+                             alt="<%= safeName %>">
+
+                        <% if (isRestaurantOpen) { %>
+                            <span class="status-badge open">OPEN</span>
+                        <% } else { %>
+                            <span class="status-badge closed">CLOSED</span>
+                        <% } %>
+
+                        <span class="rating-badge">
+                            ★ <%= String.format(java.util.Locale.US, "%.1f", rating) %>
+                        </span>
+
+                    </div>
+
+                    <div class="restaurant-title-row">
+                        <div class="restaurant-title">
+                            <%= safeName %>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="card-part-bottom-charcoal">
+
+                    <div class="cuisine-text">
+                        <%= safeCuisine %>
+                    </div>
+
+                    <div class="timing-text">
+                        🕒 10:00 AM - 11:00 PM
+                    </div>
+
+                    <div class="meta-footer-row">
+
+                        <span class="delivery-time">
+                            ◷ <%= delivery %> mins
+                        </span>
+
+                        <span class="view-menu-btn-red">
+                            View Menu →
+                        </span>
+
+                    </div>
+
+                </div>
+
+            </button>
+
+        </form>
+
+        <%
+                }
+
+                if (!foundRestaurants) {
+        %>
+
+        <p style="padding:16px;color:var(--text-muted);">
+            No restaurants are available right now.
+        </p>
+
+        <%
+                }
+
+            } catch (Exception restaurantException) {
+
+                application.log(
+                    "SmartBite: Error loading restaurants from MySQL on server.",
+                    restaurantException
+                );
+        %>
+
+        <p style="padding:16px;color:var(--text-muted);">
+            Restaurants are temporarily unavailable. Please try again.
+        </p>
+
+        <%
+            } finally {
+
+                if (restaurantRs != null) {
+                    try {
+                        restaurantRs.close();
+                    } catch (Exception ignored) {}
+                }
+
+                if (restaurantPs != null) {
+                    try {
+                        restaurantPs.close();
+                    } catch (Exception ignored) {}
+                }
+
+                if (restaurantCon != null) {
+                    try {
+                        restaurantCon.close();
+                    } catch (Exception ignored) {}
+                }
+            }
+        %>
+    </div>
+</section>
 
     <!-- HEALTH SUMMARY AND LIVE WEATHER -->
 
